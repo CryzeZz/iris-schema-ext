@@ -136,8 +136,8 @@ function readJsoncFile(p: string): any | null {
 /**
  * `intersystems.servers` 的条目长这样：
  *   "138": {
- *     "webServer": { "scheme": "https", "host": "10.0.0.138", "port": 52773 },
- *     "description": "测试库",
+ *     "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },
+ *     "description": "开发环境",
  *     "username": "_SYSTEM",
  *     "password": "******"
  *   }

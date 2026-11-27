@@ -60,10 +60,10 @@ To write it by hand, add this to `settings.json`:
 ```jsonc
 "intersystems.servers": {
   "dev": {
-    "webServer": { "scheme": "https", "host": "10.0.0.138", "port": 52773 },
+    "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },
     "username": "_SYSTEM",
     "password": "******",
-    "description": "测试库"
+    "description": "Development"
   }
 }
 ```
@@ -74,7 +74,7 @@ In other words, you do not have to copy `namespace` into VS Code settings. If th
 
 The namespace default, in order: whatever the config file says; otherwise whatever was last selected for that server; otherwise `%SYS`.
 
-Entries that only define `superServer` (port 1972) are skipped — the extension talks to the Web Gateway, usually on 52773 or 2443, not to the superserver port.
+Entries that only define `superServer` (port 1972) are skipped — the extension talks to the Web Gateway, usually on 52773, not to the superserver port.
 
 After editing the config, run **iris schema: 重新加载连接配置** and the server and namespace lists refresh immediately. Hovering a server in the drop-down shows whether the entry came from VS Code settings or from the config file.
 

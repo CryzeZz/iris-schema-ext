@@ -58,10 +58,10 @@
 ```jsonc
 "intersystems.servers": {
   "dev": {
-    "webServer": { "scheme": "https", "host": "10.0.0.138", "port": 52773 },
+    "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },
     "username": "_SYSTEM",
     "password": "******",
-    "description": "测试库"
+    "description": "开发环境"
   }
 }
 ```
@@ -72,7 +72,7 @@
 
 命名空间的默认值：配置文件里写了就用配置文件的；没写就用这台服务器上次查询时选的；都没有则是 `%SYS`。
 
-只配了 `superServer`（1972 端口）的条目会被跳过 —— 插件走 Web 网关（通常 52773 或 2443），不是超级服务器端口。
+只配了 `superServer`（1972 端口）的条目会被跳过 —— 插件走 Web 网关（通常 52773），不是超级服务器端口。
 
 配置改完，执行命令 **iris schema: 重新加载连接配置**，面板里的服务器和命名空间列表会立刻刷新。服务器下拉框的悬停提示会注明这条连接是从 VS Code 设置读的，还是从配置文件读的。
 

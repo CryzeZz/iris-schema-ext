@@ -85,7 +85,7 @@ const profileList = Object.entries(conns).map(([name, raw]) => ({
               setTimeout(() => feed('result', {
                 result: data[which],
                 elapsed: 412,
-                target: { profile: msg.profile, namespace: msg.namespace, host: '10.0.0.138', port: 52773 }
+                target: { profile: msg.profile, namespace: msg.namespace, host: 'iris.example.com', port: 52773 }
               }), 60);
             }
           },
@@ -100,7 +100,7 @@ const profileList = Object.entries(conns).map(([name, raw]) => ({
       window.__demo = function (mode) {
         window.__sent.push({ type: 'query', mode: mode, profile: data.default, namespace: data.current, keyword: mode === 'tables' ? '' : 'SQLUser.ARC_Alias' });
         const which = mode === 'tables' ? 'tables' : mode === 'er' ? 'er' : 'describe';
-        feed('result', { result: data[which], elapsed: 412, target: { profile: data.default, namespace: data.current, host: '10.0.0.138', port: 52773 } });
+        feed('result', { result: data[which], elapsed: 412, target: { profile: data.default, namespace: data.current, host: 'iris.example.com', port: 52773 } });
       };
     })();
   `;

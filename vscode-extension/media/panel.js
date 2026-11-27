@@ -208,7 +208,7 @@
         `（装了 InterSystems 插件后由 Server Manager 维护）。在 <b>settings.json</b> 里加一段即可：<br><br>` +
         `<pre class="code">"intersystems.servers": {<br>` +
         `  "dev": {<br>` +
-        `    "webServer": { "scheme": "https", "host": "10.0.0.1", "port": 52773 },<br>` +
+        `    "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },<br>` +
         `    "username": "user", "password": "pass",<br>` +
         `    "description": "开发库"<br>` +
         `  }<br>` +
