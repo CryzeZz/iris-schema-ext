@@ -184,6 +184,18 @@ ok(/\.tablewrap/.test(css) && jsClasses.has('tablewrap'), 'tablewrap 容器仍�
 ok(/\.result-actions/.test(css) && jsClasses.has('result-actions'), 'result-actions 仍由 JS 生成');
 ok(/\.mermaid-wrap/.test(css) && jsClasses.has('mermaid-wrap'), 'mermaid-wrap 仍由 JS 生成');
 
+// 「更多查询」菜单的包含块必须落在 .toolbar 上。
+// .menu 是 #moreBtn 的兄弟节点，按钮自己的 relative 管不到它；
+// 少了 .toolbar 的 relative，菜单的 absolute 会一路找到 body，
+// 按 body 高度算 100%，整个菜单被推到视口底部之外 —— 表现就是「点了没反应」。
+// 先剥掉注释再判断：注释里为了解释这件事也会出现 "position: relative" 字样，
+// 不剥离的话，把声明删干净了断言反而还是绿的。
+const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '');
+const toolbarRule = stripComments((css.match(/\.toolbar\s*\{[^}]*\}/) || [''])[0]);
+ok(/position\s*:\s*relative/.test(toolbarRule), '.toolbar 是 position: relative（.menu 的定位锚点）');
+ok(!/position\s*:\s*fixed/.test(stripComments((css.match(/\.menu\s*\{[^}]*\}/) || [''])[0])),
+  '.menu 不用 fixed 定位（会失去按钮锚点）');
+
 console.log(`\n${fail ? 'FAIL' : 'PASS'}  通过 ${pass} 项，失败 ${fail} 项`);
 if (fail) {
   console.log('失败项:\n  - ' + failures.join('\n  - '));

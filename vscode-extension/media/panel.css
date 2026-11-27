@@ -170,6 +170,11 @@ body {
   border-bottom: 1px solid var(--line);
   flex: none;
   flex-wrap: nowrap;
+  /* 菜单（.menu）是 #moreBtn 的兄弟节点，不是子节点，所以按钮上的
+     position: relative 不能当它的包含块。锚点必须落在工具栏这一层：
+     少了这行，菜单的 absolute 会一路找到 body，按 body 高度算 100%，
+     整个菜单被推到视口底部之外，看起来就是「点了没反应」。 */
+  position: relative;
 }
 
 /* 分段控件 = Bootstrap 的 .btn-group */
@@ -352,10 +357,12 @@ button.icon:hover,
 }
 
 /* 下拉菜单 = Bootstrap .dropdown-menu
-   #moreBtn 是 position: relative 的定位锚点，菜单从按钮右下角展开。
+   锚点是 .toolbar（它设了 position: relative），不是 #moreBtn。
+   #moreBtn 和 .menu 在 DOM 里是兄弟节点，按钮身上的 relative 管不到菜单。
+   .menu 的 right: 0 贴着工具栏右边缘，而按钮就是最右侧那个，
+   所以视觉上菜单正好挂在按钮下方。
    不要改成 fixed —— 那会失去锚点，菜单会飘到视口左上角。 */
 #moreBtn {
-  position: relative;
   min-width: var(--ctrl-h);
   padding: 0 var(--sp-2);
   font-size: 15px;
