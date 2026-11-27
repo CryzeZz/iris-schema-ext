@@ -1,6 +1,6 @@
 # iris schema
 
-[English](README.en.md)
+[English](https://github.com/CryzeZz/iris-schema-ext/blob/main/vscode-extension/README.en.md)
 
 在 VS Code 里查看 InterSystems IRIS 的表结构、类定义和表间关系。
 

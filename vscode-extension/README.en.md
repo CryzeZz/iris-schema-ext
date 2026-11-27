@@ -4,7 +4,7 @@ Browse InterSystems IRIS table structures, class definitions and relationships i
 
 Connection details are read straight from VS Code's own `intersystems.servers` setting, so the extension works as soon as it is installed — no second copy of your connection list to maintain.
 
-[中文说明](README.md)
+[中文说明](https://github.com/CryzeZz/iris-schema-ext/blob/main/vscode-extension/README.md)
 
 The panel UI is currently in Chinese only, so command titles, buttons and view names are quoted exactly as they appear on screen.
 
