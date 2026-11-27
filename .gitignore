@@ -1,0 +1,9 @@
+# 仓库根级别的忽略规则。
+# vscode-extension/ 下面还有一份 .gitignore，管扩展自身的内容（node_modules、out、*.vsix 等）。
+
+# 助手工作目录数据，不属于项目源码
+.workbuddydonghua/
+
+# 操作系统 / 编辑器杂项
+.DS_Store
+Thumbs.db

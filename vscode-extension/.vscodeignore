@@ -1,0 +1,30 @@
+node_modules/**
+src/**
+scripts/**
+out/**/*.map
+tsconfig.json
+.gitignore
+.vscode/**
+**/*.ts
+
+# 调试/预览产物（不随扩展发布）
+preview*.html
+panel-real.html
+.scenario-*.html
+.theme-*.html
+.panel-probe.html
+.narrow-*.html
+.cdp-profile*/
+er-render-test.html
+er-probe2.html
+er-check.mmd
+.er-*.html
+.er-*.png
+.er-*.mmd
+.icon-*.png
+.icon-preview.png
+screenshots/**
+package-lock.json
+
+# 开发文档：面向贡献者，装在用户的 VS Code 里没有意义
+DEVELOPMENT.md

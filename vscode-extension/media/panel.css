@@ -1,0 +1,1097 @@
+/* ============================================================================
+ * iris schema 查询面板样式
+ *
+ * 视觉语言参考 Bootstrap 5：卡片分层、1px 边框 + 轻阴影、紧凑的表单控件、
+ * 清晰的按钮层级、稳定的间距节奏（4/8/12/16）。
+ *
+ * 关键约束：颜色「全部」来自 VS Code 主题变量（--vscode-*）。
+ * 面板可能运行在任意主题下（深色 / 浅色 / 各种第三方主题 / 高对比度），
+ * 任何写死的颜色都会在某个主题下失效。所以：
+ *   1. 先在此处把 --vscode-* 映射成语义令牌（--card-bg / --line / --accent …）
+ *   2. 下游规则只引用语义令牌，不直接碰 --vscode-*
+ *   3. 阴影、透明度这类 VS Code 没给变量的，用 body.vscode-dark /
+ *      vscode-light / vscode-high-contrast 做分主题微调
+ * 这样加一套新主题时只要换 VS Code 主题即可，CSS 不用动。
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------- 令牌 */
+
+:root {
+  /* 表面：三级层次。深色下「抬高」= 更亮，浅色下「抬高」= 更白，
+     VS Code 的 editorWidget / sideBar 变量本身已按主题方向设计好，直接复用即可。 */
+  --surface: var(--vscode-editor-background);
+  --surface-raised: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --surface-sunken: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --surface-hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+
+  /* 文字 */
+  --text: var(--vscode-foreground);
+  --text-muted: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --text-faint: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+  --text-link: var(--vscode-textLink-foreground, var(--vscode-foreground));
+
+  /* 线条 */
+  --line: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.28)));
+  --line-strong: var(--vscode-editorWidget-border, var(--line));
+  --line-input: var(--vscode-input-border, var(--line));
+
+  /* 强调色 */
+  --accent: var(--vscode-button-background);
+  --accent-fg: var(--vscode-button-foreground);
+  --accent-hover: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+  --neutral-btn: var(--vscode-button-secondaryBackground, var(--surface-sunken));
+  --neutral-btn-fg: var(--vscode-button-secondaryForeground, var(--text));
+  --neutral-btn-hover: var(--vscode-button-secondaryHoverBackground, var(--surface-hover));
+  --focus-ring: var(--vscode-focusBorder, var(--accent));
+  --danger: var(--vscode-errorForeground, #f14c4c);
+  /* 主按钮描边。普通主题下透明（不产生视觉影响）；
+     高对比度主题下被覆盖成 contrastBorder，用来救「纯黑按钮压在纯黑背景上」的情况。 */
+  --accent-border: transparent;
+
+  /* 尺寸：Bootstrap 的 4px 栅格 + 它的圆角梯度 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  /* 控件统一高度，让工具条里的 select / input / button 严格对齐 */
+  --ctrl-h: 30px;
+  --ctrl-px: 10px;
+
+  /* 阴影：Bootstrap 的 shadow-sm / shadow。深色下必须减弱，
+     否则黑底上再压黑影等于加了个洞；浅色下才需要真阴影。 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.18);
+
+  /* 表头 / 卡片头的底色。VS Code 没有「表头」这个变量，
+     用 color-mix 在背景色上叠一点前景色，深浅主题都能得到「比背景略重」的中性色。 */
+  --th-bg: color-mix(in srgb, var(--surface-sunken) 92%, var(--text) 8%);
+  --zebra: color-mix(in srgb, var(--text) 2.5%, transparent);
+  /* 表格线单独一套：panel-border 在浅色主题下太淡，撑不起表格的横线节奏 */
+  --table-line: color-mix(in srgb, var(--text) 16%, transparent);
+  --table-line-faint: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+/* 深色：阴影几乎无意义，改用「亮一点的边框」来表达层次 */
+body.vscode-dark {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --zebra: color-mix(in srgb, var(--text) 3.5%, transparent);
+}
+
+/* 高对比度：阴影、透明底、color-mix 全部不可靠，一律退回纯色 + 实边框 */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-pop: none;
+  --th-bg: var(--surface);
+  --zebra: transparent;
+  --line: var(--vscode-contrastBorder, var(--vscode-foreground));
+  --line-strong: var(--vscode-contrastBorder, var(--vscode-foreground));
+  --line-input: var(--vscode-contrastBorder, var(--vscode-foreground));
+  /* 高对比度下不用 color-mix，直接给前景色，保证线条一定可见 */
+  --table-line: var(--vscode-contrastBorder, var(--vscode-foreground));
+  --table-line-faint: var(--vscode-contrastBorder, var(--vscode-foreground));
+  /* HC 主题的 button-background 常常是纯黑，与页面背景同色 —— 实心按钮会「消失」。
+     这里给主按钮补一圈 contrastBorder，让它重新有轮廓。
+     普通主题下这个令牌是 transparent，不产生任何视觉影响。 */
+  --accent-border: var(--vscode-contrastBorder, var(--vscode-foreground));
+}
+
+/* ---------------------------------------------------------------- 基础 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--vscode-font-family, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+::selection {
+  background: var(--vscode-editor-selectionBackground, var(--accent));
+  color: var(--vscode-editor-selectionForeground, var(--accent-fg));
+}
+
+/* 细滚动条：Bootstrap 没有，但 VS Code 面板里默认滚动条太粗，会压住表格右边框 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, rgba(128, 128, 128, 0.4));
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground, rgba(128, 128, 128, 0.6));
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------- 工具条 */
+
+/* Bootstrap 里这是「card-header 叠在页面顶部」的感觉：
+   略高于主体的表面色 + 一条底边线，把工具栏和结果区分开。 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+/* 分段控件 = Bootstrap 的 .btn-group */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex: none;
+  background: var(--surface);
+}
+
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  height: calc(var(--ctrl-h) - 2px);
+  padding: 0 var(--sp-3);
+  cursor: pointer;
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.seg-btn:last-child {
+  border-right: 0;
+}
+
+.seg-btn:hover {
+  background: var(--surface-hover);
+}
+
+.seg-btn:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+  /* HC 下 accent 可能与页面背景同为纯黑，靠这圈描边保住「选中」的可见性 */
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.seg-btn.active:hover {
+  background: var(--accent-hover);
+}
+
+/* ---------------------------------------------------------------- 表单控件 */
+
+select,
+input[type="text"],
+textarea {
+  appearance: none;
+  background: var(--vscode-input-background, var(--surface));
+  color: var(--vscode-input-foreground, var(--text));
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius);
+  padding: 0 var(--ctrl-px);
+  height: var(--ctrl-h);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+select::placeholder,
+input[type="text"]::placeholder,
+textarea::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--text-faint));
+}
+
+/* Bootstrap 的 focus ring：边框变色 + 一圈柔光 */
+select:focus,
+input[type="text"]:focus,
+textarea:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 28%, transparent);
+}
+
+body.vscode-high-contrast select:focus,
+body.vscode-high-contrast input[type="text"]:focus,
+body.vscode-high-contrast textarea:focus {
+  box-shadow: none;
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* 自绘下拉箭头：用 border 画三角，颜色跟随 currentColor，深浅主题都不需要换图 */
+select {
+  cursor: pointer;
+  padding-right: 24px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+#profileSel {
+  width: 180px;
+  flex: none;
+}
+
+#nsSel {
+  width: 148px;
+  flex: none;
+}
+
+#keyword {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+/* ---------------------------------------------------------------- 按钮 */
+
+/* .primary = Bootstrap .btn-primary，.icon = .btn-outline-secondary */
+button.primary,
+button.icon,
+.sqlbar-actions button,
+.result-actions button {
+  appearance: none;
+  font: inherit;
+  font-size: 12.5px;
+  height: var(--ctrl-h);
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+button.primary {
+  border: 1px solid var(--accent-border);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 500;
+  padding: 0 var(--sp-4);
+}
+
+button.primary:hover {
+  background: var(--accent-hover);
+}
+
+button.primary:focus-visible,
+button.icon:focus-visible,
+.sqlbar-actions button:focus-visible,
+.result-actions button:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+button.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.icon,
+.sqlbar-actions button,
+.result-actions button {
+  border: 1px solid var(--line-strong);
+  background: var(--neutral-btn);
+  color: var(--neutral-btn-fg);
+}
+
+button.icon:hover,
+.sqlbar-actions button:hover,
+.result-actions button:hover {
+  background: var(--neutral-btn-hover);
+}
+
+/* 下拉菜单 = Bootstrap .dropdown-menu
+   #moreBtn 是 position: relative 的定位锚点，菜单从按钮右下角展开。
+   不要改成 fixed —— 那会失去锚点，菜单会飘到视口左上角。 */
+#moreBtn {
+  position: relative;
+  min-width: var(--ctrl-h);
+  padding: 0 var(--sp-2);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + var(--sp-1));
+  right: 0;
+  z-index: 50;
+  min-width: 186px;
+  padding: var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--vscode-menu-background, var(--surface-raised));
+  color: var(--vscode-menu-foreground, var(--text));
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+}
+
+.menu button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 7px var(--sp-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.menu button:hover {
+  background: var(--vscode-menu-selectionBackground, var(--accent));
+  color: var(--vscode-menu-selectionForeground, var(--accent-fg));
+}
+
+/* ---------------------------------------------------------------- SQL 栏 */
+
+.sqlbar {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+#sqlInput {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 84px;
+  resize: vertical;
+  padding: var(--sp-2) var(--ctrl-px);
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: var(--vscode-editor-font-size, 12.5px);
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.sqlbar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: none;
+  /* 让两个按钮平分文本区高度：不同高度的按钮看起来像两个不相干的控件 */
+  justify-content: stretch;
+}
+
+.sqlbar-actions button {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: var(--ctrl-h);
+  height: auto;
+  padding: var(--sp-1) var(--sp-3);
+}
+
+/* ---------------------------------------------------------------- 状态条 */
+
+/* Bootstrap 的 text-muted 行：不抢眼，但用分隔线挂在工具条下 */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
+  min-height: 26px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.muted {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 结果区 */
+
+.result {
+  flex: 1 1 auto;
+  overflow: auto;
+  position: relative;
+  background: var(--surface);
+}
+
+/* 空态：Bootstrap 的 empty-state。用弱化的描边方块包一层，避免大片空白显得像没加载 */
+.placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.ph-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+
+.ph-sub {
+  font-size: 12px;
+  max-width: 420px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+/* 空态的分隔装饰线：一条短横线，避免「结果」二字孤零零浮在空白里。
+   用渐变而不是 border，两端自然淡出，深色浅色都不用调色。 */
+.ph-title::after {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 2px;
+  margin: var(--sp-3) auto 0;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.55;
+}
+
+/* 结果头 = card-header：粘顶，略高于背景，右侧挂操作按钮。
+   注意：这里不写 left: 0。结果头是 .result 的块级子元素，宽度天然等于容器宽度，
+   表格再宽也不会把它撑开（横向滚动发生在 .result 里），所以不需要横向粘。
+   之前加过 left: 0，反向验证（去掉后测试仍全绿）证明它是无用规则，已移除。 */
+.result-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+.result-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  /* 允许在窄宽度下被压缩，避免把操作按钮顶出去 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 副标题做成 Bootstrap .badge 的近亲：浅底圆角小块，不抢标题 */
+.result-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  word-break: break-all;
+  padding: 1px var(--sp-2);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.result-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.result-actions button {
+  height: 26px;
+  font-size: 11.5px;
+  padding: 0 var(--sp-2);
+}
+
+/* ---------------------------------------------------------------- 表格 */
+
+.tablewrap {
+  padding: 0;
+}
+
+table.grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  width: 100%;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* 内容列按需伸展，避免短列（如 Schema / 类型）占掉大块宽度 */
+table.grid td.grow,
+table.grid th.grow {
+  width: 100%;
+  max-width: none;
+  white-space: normal;
+}
+
+table.grid th,
+table.grid td {
+  text-align: left;
+  padding: 6px var(--sp-3);
+  /* 行线不能用 --line：它来自 panel-border，浅色主题下淡到看不见，
+     表格会失去行节奏。用前景色混一点点，深浅主题都能得到「看得出但不刺眼」的线。 */
+  border-bottom: 1px solid var(--table-line);
+  vertical-align: top;
+  white-space: nowrap;
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bootstrap 的 table：竖线只留很淡的一层，横向行线才是视觉节奏 */
+table.grid th:not(:last-child),
+table.grid td:not(:last-child) {
+  border-right: 1px solid var(--table-line-faint);
+}
+
+table.grid th:first-child,
+table.grid td:first-child {
+  width: 48px;
+}
+
+/* 表头粘顶（粘在 .result-head 之下），底色比行更重 */
+table.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--th-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.2px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+table.grid tbody tr {
+  transition: background-color 0.08s ease;
+}
+
+table.grid tbody tr:nth-child(even) td {
+  background: var(--zebra);
+}
+
+table.grid tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+table.grid tbody tr.clickable {
+  cursor: pointer;
+}
+
+table.grid td.mono,
+td.mono {
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: 12px;
+}
+
+td.pk {
+  color: var(--vscode-charts-orange, #d18616);
+  font-weight: 600;
+}
+
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.null {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.col-idx {
+  width: 42px;
+  color: var(--text-faint);
+  text-align: right !important;
+}
+
+/* ------------------------------------------------- 表头排序 / 列过滤 */
+
+/* th 本身是 nowrap + overflow:hidden + ellipsis（为了单行列名不撑宽表格），
+   但过滤输入框要占满整格，被裁掉就没法用了。这里单独放开表头格，
+   把「单行 + 省略」下沉到内部的 .th-label 上，效果一样但不再裁输入框。 */
+table.grid th.sortable {
+  /* 过滤框有 56px 的最小宽度，会给列定一个下限。「主键」这种两字列原本只有
+     ~40px，塞不下输入框 —— 补到能放下占位文字。只加在 th 上，td 不受影响。 */
+  min-width: 96px;
+  padding: 4px var(--sp-2) 5px;
+  vertical-align: middle;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  cursor: pointer;
+  user-select: none;
+}
+
+table.grid th.sortable.grow {
+  min-width: 140px;
+}
+
+/* 行号列不参与排序/过滤，宽度保持原来的窄条 */
+table.grid th.col-idx {
+  min-width: 0;
+}
+
+table.grid th.sortable:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* 列名行：用 inline-flex 让宽度贴着内容走。若用 flex（块级），
+   grow 列里指示器会被推到格子最右边，跟列名分家。
+   超长列名由 .th-label 的 ellipsis 兜住。 */
+.th-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.th-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 双三角指示器：两颗常驻（避免排序时列宽跳动），未激活的一侧极淡。
+   激活侧只靠颜色区分，不做位移/缩放，窄表头下不会把列名挤走。 */
+.th-sort {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  flex: none;
+  font-size: 7px;
+  line-height: 1;
+  font-style: normal;
+  color: var(--text-faint);
+  opacity: 0.45;
+}
+
+.th-sort i {
+  font-style: normal;
+}
+
+table.grid th.sort-asc .th-sort,
+table.grid th.sort-desc .th-sort {
+  opacity: 1;
+}
+
+table.grid th.sort-asc .th-sort i:last-child,
+table.grid th.sort-desc .th-sort i:first-child {
+  /* 隐藏反向那一颗，只留「升」或「降」一个箭头 */
+  visibility: hidden;
+}
+
+table.grid th.sort-asc .th-sort i:first-child,
+table.grid th.sort-desc .th-sort i:last-child {
+  color: var(--accent);
+}
+
+table.grid th.sort-asc,
+table.grid th.sort-desc {
+  color: var(--text);
+}
+
+/* 列过滤输入框：跟工具条输入框同一套令牌，但压到表格的密度里 */
+.col-filter {
+  display: block;
+  width: 100%;
+  min-width: 56px;
+  height: 20px;
+  margin-top: 3px;
+  padding: 0 5px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--vscode-input-foreground, var(--text));
+  background: var(--vscode-input-background, var(--surface));
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.col-filter::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--text-faint));
+  opacity: 0.75;
+}
+
+.col-filter:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 28%, transparent);
+}
+
+/* 有过滤条件的列：输入框描边点亮，即使没聚焦也能看出「这一列被筛了」 */
+table.grid th.filtered .col-filter {
+  border-color: var(--focus-ring);
+}
+
+/* 过滤到 0 行时的占位行，别让表格只剩个空壳 */
+.grid-empty {
+  padding: var(--sp-4) var(--sp-3) !important;
+  text-align: center !important;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* 高对比度下 color-mix / 柔光都不可靠，focus 只用实描边 */
+body.vscode-high-contrast .col-filter:focus,
+body.vscode-high-contrast-light .col-filter:focus {
+  box-shadow: none;
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- 代码块 */
+
+pre.code {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) 40px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: var(--vscode-editor-font-size, 12.5px);
+  line-height: 1.6;
+  white-space: pre;
+  overflow: auto;
+  color: var(--vscode-editor-foreground, var(--text));
+  background: var(--surface);
+  tab-size: 2;
+}
+
+/* ---------------------------------------------------------------- 键值列表 */
+
+.kv {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) 30px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--sp-2) var(--sp-4);
+}
+
+.kv dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.kv dd {
+  margin: 0;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  word-break: break-all;
+}
+
+/* ---------------------------------------------------------------- ER 图 */
+
+.mermaid-wrap {
+  padding: var(--sp-4);
+  overflow: auto;
+}
+
+.mermaid-wrap svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---------------------------------------------------------------- 卡片（索引 / 外键小节） */
+
+.section {
+  margin: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.section h3 {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--text-muted);
+  background: var(--th-bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.section .body {
+  padding: var(--sp-3);
+}
+
+.section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.section li {
+  margin: 3px 0;
+  word-break: break-all;
+}
+
+.section li::marker {
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------- 空 / 错误 = 告警块 */
+
+.empty {
+  padding: 26px var(--sp-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.err {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--danger);
+  white-space: pre-wrap;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.65;
+  /* 左粗边框 + 极淡底色 = Bootstrap .alert 的语言，但只用危险色单色系 */
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+/* 紧贴工具条下方的告警块：去掉上边距和上圆角，让它像「页面级 banner」而不是悬空卡片 */
+.result > .err {
+  margin: 0;
+  border-top-width: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+body.vscode-high-contrast .err {
+  background: transparent;
+  border-color: var(--danger);
+}
+
+.err pre.code {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+/* 候选列表 = Bootstrap .badge 圆形胶囊 */
+.candidates {
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.candidates li button {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--neutral-btn);
+  color: var(--text-link);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px var(--sp-3);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.candidates li button:hover {
+  background: var(--neutral-btn-hover);
+}
+
+/* ---------------------------------------------------------------- Toast / 加载 */
+
+.toast {
+  position: fixed;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: 999px;
+  background: var(--vscode-notifications-background, var(--surface-raised));
+  color: var(--vscode-notifications-foreground, var(--text));
+  border: 1px solid var(--vscode-notifications-border, var(--line-strong));
+  box-shadow: var(--shadow-pop);
+  z-index: 100;
+  font-size: 12.5px;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  backdrop-filter: blur(1px);
+  z-index: 90;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 尊重系统的「减少动效」设置 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------- 窄窗口 */
+
+/* 极窄时（<420px）让结果头折行，操作按钮整体靠右。
+   只折行、不把标题强行拉满：让标题和副标题并排、按钮落在下一行，
+   比「标题一行 + 副标题再一行」更省纵向空间。 */
+@media (max-width: 420px) {
+  .result-actions {
+    margin-left: 0;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 760px) {
+  /* 窄窗口下重排成两行：
+       第一行 = 模式切换 + 服务器 + 命名空间
+       第二行 = 关键词 + 查询 + 更多
+     靠 order 显式指定，避免依赖 DOM 顺序偶然得到的结果。
+     之前 #keyword 单独 order: 10 会让「查询」被挤到第一行末尾，读起来很别扭。 */
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .seg {
+    order: 1;
+    flex: 1 1 100%;
+  }
+  .seg-btn {
+    flex: 1 1 auto;
+    /* 按钮是 <button>，默认 inline-block，justify-content 对它无效，得先变成 flex 容器 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #profileSel,
+  #nsSel {
+    order: 2;
+    flex: 1 1 130px;
+    width: auto;
+  }
+  /* 关键词输入框和「查询」「更多」挤在同一行：输入框吃掉剩余宽度，
+     但给个不大的 min-width，否则窄到 380px 时会互相顶出换行，留下半截行。 */
+  #keyword {
+    order: 3;
+    flex: 1 1 90px;
+    min-width: 0;
+  }
+  #queryBtn {
+    order: 4;
+    flex: 0 0 auto;
+    padding: 0 var(--sp-3);
+  }
+  #moreBtn {
+    order: 5;
+    flex: 0 0 auto;
+  }
+  .menu {
+    right: 0;
+  }
+  .sqlbar {
+    flex-direction: column;
+  }
+  .sqlbar-actions {
+    flex-direction: row;
+  }
+  .sqlbar-actions button {
+    flex: 1 1 auto;
+  }
+}

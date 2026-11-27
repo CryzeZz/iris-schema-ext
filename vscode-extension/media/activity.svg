@@ -1,0 +1,15 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 由 scripts/build-activity-icon.js 从 media/icon-marketplace.png 生成，勿手改。
+       活动栏图标会被 VS Code 用主题前景色覆盖，所以必须单色：只用 currentColor，不要写死颜色。
+
+       R 分两层画，不是随意拆的：
+         第 1 层 竖干+碗部+右腿 用 nonzero 求「并集」—— 几个块互相压着是好事，不会出现缝
+         第 2 层 字腔 单独用 evenodd 挖空
+       如果把四块塞进同一个 path 再开 evenodd，竖干与字腔重叠的那片会被翻转两次变成实心，
+       字腔就只剩一个三角形（这个 bug 出过一版，预览图一眼能看出来）。 -->
+  <g fill="currentColor">
+    <rect x="3.16" y="6.27" width="3.51" height="11.46" />
+    <path fill-rule="nonzero" d="M9.53 17.78 H13.04 V6.22 H9.53 Z M9.53 6.22 H15.2 C19.93 6.42 19.93 10.48 16.55 11.18 C15.45 11.68 14.24 11.68 13.04 11.68 V6.22 Z M12.99 12.19 L20.84 17.78 H18.5 L12.99 14.01 Z" />
+    <path fill-rule="evenodd" d="M13.17 10.9 V8.56 A3.64 1.17 0 0 1 13.17 10.9 Z" />
+  </g>
+</svg>

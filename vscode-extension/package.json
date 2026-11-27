@@ -1,0 +1,93 @@
+{
+  "name": "iris-schema",
+  "displayName": "iris schema",
+  "description": "浏览与查询 InterSystems IRIS 表结构、类定义与 ER 图",
+  "version": "1.0.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "icon": "media/icon-marketplace.png",
+  "activationEvents": [
+    "onCommand:irisSchema.openPanel",
+    "onCommand:irisSchema.refreshConnections",
+    "onView:irisSchema.welcome"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "irisSchema",
+          "title": "iris schema",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "irisSchema": [
+        {
+          "id": "irisSchema.welcome",
+          "name": "查询",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "irisSchema.welcome",
+        "contents": "在这里浏览与查询 InterSystems IRIS 的表结构、类定义与 ER 图。\n\n连接信息直接读取 VS Code 设置里的 `intersystems.servers`（Server Manager）。\n\n[打开查询面板](command:irisSchema.openPanel)\n[重新加载连接配置](command:irisSchema.refreshConnections)\n\n也可以在任意 `.cls` 文件里点编辑器标题栏的图标打开。"
+      }
+    ],
+    "commands": [
+      {
+        "command": "irisSchema.openPanel",
+        "title": "打开查询面板",
+        "category": "iris schema"
+      },
+      {
+        "command": "irisSchema.refreshConnections",
+        "title": "重新加载连接配置",
+        "category": "iris schema"
+      }
+    ],
+    "configuration": {
+      "title": "iris schema",
+      "properties": {
+        "irisSchema.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "补充连接配置文件路径。留空则使用 ~/.iris-schema.json（与 iris-schema 技能共用）。服务器连接以 VS Code 设置 intersystems.servers 为主来源，两边的同名服务器会合并，缺失字段（如 namespace）由此文件补齐。"
+        },
+        "irisSchema.sampleLimit": {
+          "type": "number",
+          "default": 100,
+          "description": "查询数据时默认返回的行数上限"
+        }
+      }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "irisSchema.openPanel",
+          "when": "resourceExtname == .cls",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

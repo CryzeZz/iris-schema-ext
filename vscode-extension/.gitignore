@@ -1,0 +1,21 @@
+node_modules/
+out/
+*.vsix
+
+# 调试/预览产物
+preview*.html
+panel-real.html
+er-render-test.html
+er-probe2.html
+er-check.mmd
+.er-*.html
+.er-*.png
+.er-*.mmd
+.scenario-*.html
+.theme-*.html
+.panel-probe.html
+.narrow-*.html
+.cdp-profile*/
+.icon-*.png
+.icon-preview.png
+screenshots/

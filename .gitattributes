@@ -1,0 +1,16 @@
+# 统一换行符：仓库内存 LF，检出时按平台转换。
+# 避免 Windows 上每个文件都产生「整份文件被改动」的假 diff。
+* text=auto eol=lf
+
+# 这些内容按 LF 存，检出时也不转换
+*.ts   text eol=lf
+*.js   text eol=lf
+*.css  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.svg  text eol=lf
+
+# 二进制：不做换行转换，也不做文本 diff
+*.png  binary
+*.vsix binary
+*.ico  binary
