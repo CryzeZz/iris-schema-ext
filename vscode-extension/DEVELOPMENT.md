@@ -191,4 +191,8 @@ npm run package          # 产出 iris-schema-<版本>.vsix，版本取自 packa
 code --install-extension iris-schema-1.0.0.vsix --force
 ```
 
-扩展标识是 `local.iris-schema`。如果之前装过旧的 `iris-schema-ext`，两者会被当成两个独立扩展，记得先卸载：`code --uninstall-extension local.iris-schema-ext`。
+扩展标识是 `CryzeZz.iris-schema`，由 `package.json` 的 `publisher` 和 `name` 拼成。改 `publisher` 相当于换了一个新扩展，旧标识下装的那份不会被覆盖，要先卸载：
+
+```bash
+code --uninstall-extension local.iris-schema
+```

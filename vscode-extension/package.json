@@ -3,7 +3,7 @@
   "displayName": "iris schema",
   "description": "浏览与查询 InterSystems IRIS 表结构、类定义与 ER 图",
   "version": "1.0.0",
-  "publisher": "local",
+  "publisher": "CryzeZz",
   "repository": {
     "type": "git",
     "url": "https://github.com/CryzeZz/iris-schema-ext.git",
