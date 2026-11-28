@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { findProfile, loadProfilesCached, ProfileEntry } from './config';
 import { execute, OpRequest } from './ops';
 import { logout, namespaces, ConnConfig } from './irisClient';
+import { allMessages, getLanguage, t } from './i18n';
 
 interface PanelState {
   profile: string | null;
@@ -118,9 +119,7 @@ export class IrisPanel {
     const src = loadProfilesCached();
     const p = findProfile(src, name);
     if (!p) {
-      const err: any = new Error(
-        '未找到连接配置。请在 VS Code 设置里添加 intersystems.servers（Server Manager），或在用户目录创建 ~/.iris-schema.json。'
-      );
+      const err: any = new Error(t('err.noProfile'));
       err.code = 'NO_PROFILE';
       throw err;
     }
@@ -148,7 +147,7 @@ export class IrisPanel {
           return;
         case 'copy':
           await vscode.env.clipboard.writeText(String(msg.text || ''));
-          this.post({ type: 'toast', text: '已复制到剪贴板' });
+          this.post({ type: 'toast', text: t('notice.copied') });
           return;
         case 'saveUdl':
           await this.saveUdl(msg.text, msg.suggested);
@@ -183,7 +182,7 @@ export class IrisPanel {
 
   private async runQuery(msg: any): Promise<void> {
     if (this.busy) {
-      this.post({ type: 'toast', text: '上一次查询还在进行中…' });
+      this.post({ type: 'toast', text: t('notice.busy') });
       return;
     }
     const { profile, namespace, mode, keyword } = msg;
@@ -243,8 +242,8 @@ export class IrisPanel {
 
   private async saveUdl(text: string, suggested?: string): Promise<void> {
     const uri = await vscode.window.showSaveDialog({
-      filters: { 'ObjectScript': ['cls'], '所有文件': ['*'] },
-      saveLabel: '保存类定义',
+      filters: { 'ObjectScript': ['cls'], [t('common.allFiles', 'All files')]: ['*'] },
+      saveLabel: t('common.saveClass', 'Save class definition'),
       defaultUri: suggested
         ? vscode.Uri.file(suggested)
         : vscode.workspace.workspaceFolders
@@ -289,7 +288,7 @@ export class IrisPanel {
     ].join('; ');
 
     return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${getLanguage() === 'zh' ? 'zh-CN' : 'en'}">
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
@@ -301,50 +300,51 @@ export class IrisPanel {
 <div id="app">
   <header class="toolbar">
     <div class="seg" id="modeSeg" role="tablist">
-      <button class="seg-btn active" data-mode="describe">表结构</button>
-      <button class="seg-btn" data-mode="udl">类定义</button>
-      <button class="seg-btn" data-mode="er">ER 图</button>
-      <button class="seg-btn" data-mode="sample">数据</button>
+      <button class="seg-btn active" data-mode="describe">${t('mode.describe')}</button>
+      <button class="seg-btn" data-mode="udl">${t('mode.udl')}</button>
+      <button class="seg-btn" data-mode="er">${t('mode.er')}</button>
+      <button class="seg-btn" data-mode="sample">${t('mode.sample')}</button>
     </div>
-    <select id="profileSel" title="服务器"></select>
-    <select id="nsSel" title="命名空间"></select>
-    <input id="keyword" type="text" placeholder="表名 / 类名，如 SQLUser.Patient" spellcheck="false" />
-    <button id="queryBtn" class="primary">查询</button>
-    <button id="moreBtn" class="icon" title="更多查询">⋯</button>
+    <select id="profileSel" title="${t('toolbar.server')}"></select>
+    <select id="nsSel" title="${t('toolbar.namespace')}"></select>
+    <input id="keyword" type="text" placeholder="${attr(t('toolbar.keywordPlaceholder'))}" spellcheck="false" />
+    <button id="queryBtn" class="primary">${t('toolbar.query')}</button>
+    <button id="moreBtn" class="icon" title="${t('toolbar.more')}">⋯</button>
     <div id="moreMenu" class="menu hidden">
-      <button data-mode="tables">列出全部表</button>
-      <button data-mode="findColumn">按列名找表</button>
-      <button data-mode="ddl">生成建表 DDL</button>
-      <button data-mode="sql">自由 SQL</button>
-      <button data-mode="test">测试连接</button>
+      <button data-mode="tables">${t('menu.tables')}</button>
+      <button data-mode="findColumn">${t('menu.findColumn')}</button>
+      <button data-mode="ddl">${t('menu.ddl')}</button>
+      <button data-mode="sql">${t('menu.sql')}</button>
+      <button data-mode="test">${t('menu.test')}</button>
     </div>
   </header>
 
   <div id="sqlBar" class="sqlbar hidden">
-    <textarea id="sqlInput" rows="4" spellcheck="false" placeholder="-- 仅支持 SELECT / WITH 只读查询&#10;SELECT TOP 50 * FROM SQLUser.Patient"></textarea>
+    <textarea id="sqlInput" rows="4" spellcheck="false" placeholder="${attr(t('sql.placeholder'))}"></textarea>
     <div class="sqlbar-actions">
-      <button id="sqlRun" class="primary">执行</button>
-      <button id="sqlClose">收起</button>
+      <button id="sqlRun" class="primary">${t('sql.run')}</button>
+      <button id="sqlClose">${t('sql.close')}</button>
     </div>
   </div>
 
   <div id="statusbar" class="statusbar">
-    <span id="targetInfo" class="muted">—</span>
+    <span id="targetInfo" class="muted">${t('status.placeholder')}</span>
     <span id="elapsed" class="muted"></span>
   </div>
 
   <main id="result" class="result">
     <div class="placeholder">
-      <div class="ph-title">结果</div>
-      <div class="ph-sub">选择服务器与命名空间，填入表名后点击「查询」</div>
+      <div class="ph-title">${t('placeholder.title')}</div>
+      <div class="ph-sub">${t('placeholder.sub')}</div>
     </div>
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <div id="loading" class="loading hidden"><div class="spinner"></div><span>查询中…</span></div>
+  <div id="loading" class="loading hidden"><div class="spinner"></div><span>${t('placeholder.loading')}</span></div>
 </div>
 <!-- 本地 mermaid：离线/内网环境也能渲染 ER 图 -->
 <script nonce="${nonce}" src="${mermaidUri}"></script>
+<script nonce="${nonce}">window.__I18N__ = ${JSON.stringify(allMessages())};</script>
 <script nonce="${nonce}">${js}</script>
 </body>
 </html>`;
@@ -373,4 +373,19 @@ function makeNonce(): string {
   let s = '';
   for (let i = 0; i < 32; i++) s += chars[Math.floor(Math.random() * chars.length)];
   return s;
+}
+
+/**
+ * 把词条安全地塞进 HTML 属性值。
+ *
+ * SQL 提示里带换行（`\n`），直接放进 placeholder="" 会被 HTML 解析器
+ * 压成空格。用字符引用 `&#10;` 才能保住换行，这也是原来模板里手写的那套做法。
+ */
+function attr(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '&#10;');
 }

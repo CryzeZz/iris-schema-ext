@@ -17,6 +17,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
+import { t } from './i18n';
 
 export interface ConnConfig {
   host: string;
@@ -143,7 +144,7 @@ function basicAuth(cfg: ConnConfig): string {
 
 function baseUrl(cfg: ConnConfig): string {
   const port = cfg.web_port;
-  if (!port) throw new Error('未配置 web_port（IRIS Web 网关端口）');
+  if (!port) throw new Error(t('err.noWebPort'));
   const scheme = cfg.protocol || 'http';
   const path = cfg.web_path || '';
   return `${scheme}://${cfg.host}:${port}${path}`;
@@ -157,6 +158,22 @@ export class HttpError extends Error {
   /** 类不存在（Atelier 用 400 + ERROR #16006 表示，不是网关抖动，不能重试） */
   get isMissingDoc(): boolean {
     return this.status === 400 && /#16006|name is invalid/i.test(this.body);
+  }
+}
+
+/**
+ * IRIS 返回的 SQL 业务错误 —— 语法错、表不存在这类，重试没用，直接抛给用户。
+ *
+ * 用独立的子类而不是靠 message 前缀识别：message 是本地化过的文案，
+ * 中文界面下以「SQL 执行失败」开头，英文界面下以 "SQL failed" 开头。
+ * 原来上游写的是 `e.message.startsWith('SQL 执行失败')`，双语化之后
+ * 英文环境里这个判断永远为假，业务错误会被当成网络抖动重试 3 次，
+ * 白白多等 800ms 还掩盖了真实错误。
+ */
+export class SqlError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SqlError';
   }
 }
 
@@ -203,7 +220,7 @@ function rawRequest(
       });
     });
     req.on('timeout', () => {
-      req.destroy(new Error(`请求超时 (${timeout}ms): ${urlStr}`));
+      req.destroy(new Error(t('err.timeout', timeout, urlStr)));
     });
     req.on('error', reject);
     if (body) req.write(body);
@@ -344,7 +361,7 @@ export async function fetchClassUdl(cfg: ConnConfig, className: string, useCache
       const content: string[] | undefined = data?.result?.content;
       if (!content || !content.length) {
         throw new Error(
-          `Atelier 返回空内容: ${JSON.stringify(data?.status ?? '')}（类名 ${className}，检查命名空间/权限）`
+          t('err.emptyContent', JSON.stringify(data?.status ?? ''), className)
         );
       }
       if (useCache) UDL_CACHE.set(ck, [...content]);
@@ -355,14 +372,14 @@ export async function fetchClassUdl(cfg: ConnConfig, className: string, useCache
       // 早前把这种情况当成网关抖动重试，导致每个不存在的类白等 3×400ms，
       // 并把 400 误读成"并发被网关拒绝"。
       if (e instanceof HttpError && e.isMissingDoc) {
-        throw new Error(`类 ${className} 在命名空间 ${cfg.namespace} 中不存在`);
+        throw new Error(t('err.classMissing', className, cfg.namespace));
       }
       if (attempt < 2 && isRetryable(e)) {
         await sleep(400);
         continue;
       }
       if (e instanceof Error) {
-        throw new Error(`${e.message} （类名 ${className}，检查 web_port/命名空间/账号权限）`);
+        throw new Error(t('err.classMissingHint', e.message, className));
       }
       throw e;
     }
@@ -392,10 +409,10 @@ export async function postQuery(cfg: ConnConfig, query: string, timeout = 60000)
           .map((x: any) => x?.error || x?.code || JSON.stringify(x))
           .filter(Boolean)
           .join('; ');
-        throw new Error(`SQL 执行失败: ${msg}`);
+        throw new SqlError(t('err.sqlFailed', msg));
       }
       const content = data?.result?.content;
-      if (!content) throw new Error('SQL 返回结果为空');
+      if (!content) throw new SqlError(t('err.sqlEmpty'));
       // Atelier 的 action/query 返回 content 为「按列名做键的对象数组」：
       //   [{ Name: "%ASQ.AST" }, ...]
       // 这里统一转成 headers + rows 二维表。同时兼容个别版本的 {fields, rows} 形态。
@@ -430,7 +447,7 @@ export async function postQuery(cfg: ConnConfig, query: string, timeout = 60000)
       lastErr = e;
       // SQL 业务错误不重试
       if (e instanceof HttpError && e.status < 500 && e.status !== 404) throw e;
-      if (e instanceof Error && e.message.startsWith('SQL 执行失败')) throw e;
+      if (e instanceof SqlError) throw e;
       if (attempt < 2 && isRetryable(e)) {
         await sleep(400);
         continue;
@@ -1107,8 +1124,8 @@ export async function resolveClass(cfg: ConnConfig, schema: string, table: strin
       /* 继续试下一个 */
     }
   }
-  if (q1.error) throw new Error(`定位类定义失败（${schema}.${table}）：${(q1.error as Error).message}`);
-  if (q2.error) throw new Error(`定位类定义失败（${schema}.${table}）：${(q2.error as Error).message}`);
+  if (q1.error) throw new Error(t('err.locateClass', schema, table, (q1.error as Error).message));
+  if (q2.error) throw new Error(t('err.locateClass', schema, table, (q2.error as Error).message));
   return null;
 }
 
@@ -1186,7 +1203,7 @@ export async function parseClassSchema(
 ): Promise<TableSchema> {
   const className = cls || (await resolveClass(cfg, schema, table));
   if (!className) {
-    throw new Error(`未找到表 ${schema}.${table} 对应的类定义（确认表名或 schema 是否正确）`);
+    throw new Error(t('err.noClassForTable', schema, table));
   }
   const lines = await fetchClassUdl(cfg, className);
   const ownPkg = className.includes('.') ? className.slice(0, className.lastIndexOf('.')) : undefined;

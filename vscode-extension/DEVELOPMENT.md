@@ -1,6 +1,6 @@
 # iris schema 开发说明
 
-功能和使用方法见 [README.md](README.md)（英文版 [README.en.md](README.en.md)），这里只讲实现、验证和打包。
+功能和使用方法见 [README.md](README.md)（中英对照），这里只讲实现、验证和打包。
 
 ## 目录
 
@@ -11,6 +11,9 @@ src/
   config.ts        连接配置加载与合并
   irisClient.ts    IRIS Atelier / Web 网关客户端
   ops.ts           各种查询的实现（表结构、类定义、ER、DDL 等）
+  i18n.ts          界面文案的中英双语表
+package.nls.json       contributes 的英文文案（VS Code 官方 nls 机制）
+package.nls.zh-cn.json contributes 的中文文案
 media/
   panel.css        面板样式
   panel.js         面板前端逻辑
@@ -30,6 +33,35 @@ npm run compile     # 或 npm run watch
 按 `F5` 启动扩展开发宿主。
 
 ## 实现要点
+
+### 界面文案：两套机制并存
+
+界面语言跟随 VS Code（`vscode.env.language`，`zh*` 用中文，其余英文），但实现上分成两块：
+
+| 范围 | 机制 | 文件 |
+| --- | --- | --- |
+| `contributes`（命令标题、视图名、配置项描述） | VS Code 官方 nls，`package.json` 里写 `%key%` | `package.nls.json` / `package.nls.zh-cn.json` |
+| 侧边栏 HTML、面板 webview、报错信息 | 自建词条表 | `src/i18n.ts` + `media/panel.js` |
+
+**为什么大部分界面不走 nls。** 本插件的界面主体在 webview 里，跑在浏览器上下文。`vscode.l10n.t` 是扩展宿主侧的 API，webview 拿不到；而且 nls 的翻译由 UI 语言驱动，运行时拿不到「当前语言」这个值本身。所以 `panel.ts` 渲染 HTML 时把整张词条表写进去：
+
+```html
+<script nonce="...">window.__I18N__ = {"mode.describe":"Columns", ...};</script>
+```
+
+`panel.js` 开头读 `window.__I18N__`，自己实现 `t(key, ...args)` 查表并替换 `{0}` `{1}`。直接双击打开导出的 HTML 调试样式时这张表不存在，`t()` 退化成返回 key 本身 —— 布局看得清，也能一眼看出哪条漏注入。
+
+**词条表用 `Record<MsgKey, string>` 约束。** `MsgKey` 是字符串联合类型，中英两张表都是这个类型，漏翻任何一个 key 直接编译报错，不会等到运行时才发现某处显示成 `undefined`。
+
+**改文案只改 `src/i18n.ts`，不要在 JS 里写死字符串。** 尤其是 panel.js 里判断「这一列是什么列」的逻辑，必须用 `matchHeader(key)` 从词条表反查，不能写 `/^(表名|table)$/` 这种双语硬编码正则 —— 那种写法在改文案时会静默失配：表格不报错，只是列宽分配、行点击跳转、等宽字体判断全部失灵，很难发现。
+
+**别让逻辑依赖文案。** 双语化过程中踩过三处：
+
+- 原本用 `/^类定义 — (\S+)/` 从结果标题里抠类名来显示「保存为 .cls」按钮 → 英文标题下按钮消失。改成读 `r.meta.cls`。
+- 原本用 `/　?[\d ]+(?: \/ [\d ]+)? 行$/` 正则改状态栏文本更新行数 → 英文 "rows" 匹配不上，过滤后行数不更新。改成维护 `lastRowCount` / `lastRowTotal` 状态变量再 `updateElapsed()`。
+- `irisClient.ts` 原本用 `e.message.startsWith('SQL 执行失败')` 识别业务错误 → 英文环境永远为假，业务错误被误当网络抖动重试 3 次。改成独立子类 `SqlError`。
+
+规律是一致的：**用结构（数据字段、错误类型）承载语义，不要用显示文本承载语义。**
 
 ### 表结构不查 INFORMATION_SCHEMA
 

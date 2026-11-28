@@ -22,6 +22,7 @@ import {
   searchTables,
   fetchClassUdl,
 } from './irisClient';
+import { t } from './i18n';
 
 export type OpName =
   | 'describe'
@@ -61,7 +62,7 @@ export async function locate(
   fallbackSchema?: string
 ): Promise<{ schema: string; table: string; cls: string | null }> {
   const raw = (name || '').trim().replace(/^"|"$/g, '');
-  if (!raw) throw new Error('请填写表机构名（可写 SQLUser.Patient 或 Patient）');
+  if (!raw) throw new Error(t('err.needClass'));
 
   let schema = '';
   let table = '';
@@ -88,29 +89,29 @@ export async function locate(
     );
     if (exact.length === 1) return { schema: exact[0].schema, table: exact[0].table, cls: exact[0].cls };
     const err: any = new Error(
-      `表名不唯一，找到 ${cands.length} 个候选：` +
+      t('err.tableAmbiguous', cands.length) +
         cands
           .slice(0, 8)
           .map((c) => `${c.schema}.${c.table}${c.type ? `(${c.type})` : ''}`)
-          .join('、')
+          .join(', ')
     );
     err.candidates = cands;
     throw err;
   }
-  throw new Error(`未找到表 ${schema}.${table}（可勾选"模糊搜索"按关键字找）`);
+  throw new Error(t('err.tableNotFound', schema, table));
 }
 
 function assertReadonly(sql: string): void {
   const s = sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ').trim();
   if (!/^(select|with)\b/i.test(s)) {
-    throw new Error('只允许 SELECT / WITH 查询');
+    throw new Error(t('err.selectOnly'));
   }
   if (/;\s*\S/.test(s)) {
-    throw new Error('只允许单条语句');
+    throw new Error(t('err.singleStatement'));
   }
   const banned = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|merge|call|do)\b/i;
   if (banned.test(s.replace(/'[^']*'/g, "''"))) {
-    throw new Error('只允许只读查询');
+    throw new Error(t('err.readOnly'));
   }
 }
 
@@ -160,16 +161,16 @@ async function runTables(cfg: ConnConfig, keyword: string | undefined, limit: nu
     .slice(0, limit);
   return {
     kind: 'table',
-    title: `表清单（${out.length}${out.length >= limit ? '+' : ''}）`,
-    subtitle: like ? `关键字：${like}　·　点击任意行可直接查看表结构` : '点击任意行可直接查看表结构',
-    headers: ['Schema', '表名', '类型'],
+    title: t('res.tablesTitle', out.length, out.length >= limit ? '+' : ''),
+    subtitle: like ? t('res.tablesSubKeyword', like) : t('res.tablesSub'),
+    headers: [t('hdr.schema'), t('hdr.table'), t('hdr.type')],
     rows: out,
   };
 }
 
 async function runFindColumn(cfg: ConnConfig, keyword: string, limit: number): Promise<OpResult> {
   const kw = (keyword || '').trim();
-  if (!kw) throw new Error('请填写列名关键字');
+  if (!kw) throw new Error(t('err.needColumnKeyword'));
   const esc = kw.replace(/'/g, "''").toLowerCase();
   const scan = Math.max(2001, limit);
   const sql =
@@ -180,16 +181,16 @@ async function runFindColumn(cfg: ConnConfig, keyword: string, limit: number): P
   const out = res.rows.filter((r) => !isSystemSchema(r[0])).slice(0, limit);
   return {
     kind: 'table',
-    title: `包含「${kw}」的列（${out.length}）`,
-    subtitle: '点击任意行可跳到对应表结构',
-    headers: ['Schema', '表名', '列名', '类型', '长度'],
+    title: t('res.colsTitle', kw, out.length),
+    subtitle: t('res.colsSub'),
+    headers: [t('hdr.schema'), t('hdr.table'), t('hdr.column'), t('hdr.type'), t('hdr.length')],
     rows: out,
   };
 }
 
 async function runDdl(cfg: ConnConfig, schema: string, table: string): Promise<OpResult> {
   const cls = await resolveClass(cfg, schema, table);
-  if (!cls) throw new Error(`未找到表 ${schema}.${table}`);
+  if (!cls) throw new Error(t('err.tableNotFound', schema, table));
   const lines = await fetchClassUdl(cfg, cls);
   const name = `${cls.split('.').pop()}`;
   const q = await postQuery(
@@ -200,8 +201,8 @@ async function runDdl(cfg: ConnConfig, schema: string, table: string): Promise<O
   const ddl = await buildDdl(cfg, schema, table, cls, sqlTable);
   return {
     kind: 'code',
-    title: `建表 DDL — ${schema}.${sqlTable}`,
-    subtitle: `类定义 ${cls}（${lines.length} 行）`,
+    title: t('res.ddlTitle', schema, sqlTable),
+    subtitle: t('res.ddlSub', cls, lines.length),
     code: ddl,
     language: 'sql',
   };
@@ -209,11 +210,11 @@ async function runDdl(cfg: ConnConfig, schema: string, table: string): Promise<O
 
 /** IRIS 类型 + 长度 -> 合法 DDL 类型写法。 */
 function ddlType(type: string, length: string | null | undefined): string {
-  const t = (type || '').toLowerCase();
+  const ty = (type || '').toLowerCase();
   const ln = (length || '').trim();
   // 带精度/标度的数值类型：numeric(MAXVAL, SCALE) 里存的是 "MAXVAL,SCALE"
-  if (ln.includes(',')) return `${t}(${ln})`;
-  switch (t) {
+  if (ln.includes(',')) return `${ty}(${ln})`;
+  switch (ty) {
     case 'integer':
       return 'integer';
     case 'smallint':
@@ -227,7 +228,7 @@ function ddlType(type: string, length: string | null | undefined): string {
     case 'time':
     case 'timestamp':
     case 'bit':
-      return t;
+      return ty;
     case 'varchar':
       // varchar 必须有长度，缺省按 IRIS 的 50
       return `varchar(${ln || 50})`;
@@ -238,7 +239,7 @@ function ddlType(type: string, length: string | null | undefined): string {
     case 'longvarbinary':
       return 'longvarbinary';
     default:
-      return ln ? `${t}(${ln})` : t;
+      return ln ? `${ty}(${ln})` : ty;
   }
 }
 
@@ -408,19 +409,19 @@ async function runEr(cfg: ConnConfig, name: string, fallbackSchema?: string): Pr
   // "Expecting 'EOF', 'SPACE', 'NEWLINE' ..."。空行保证摘干净后仍各行独立。
   const detail = [
     '',
-    `-- 类定义：${parsed.class}`,
-    `-- 数据 Global：${parsed.ref || parsed.global || '(未解析)'}`,
-    `-- 字段 Global 位置（${parsed.rows.length} 列）`,
+    t('res.udlHintClass', parsed.class),
+    t('res.udlHintGlobal', parsed.ref || parsed.global || '(n/a)'),
+    t('res.udlHintRows', parsed.rows.length),
     ...parsed.rows.filter((r) => r.global).map((r) => `--   ${r.name.padEnd(24)} ${r.global}`),
   ].join('\n');
 
   const relNote = edges.length
-    ? `${edges.length} 条引用关系`
-    : '该类没有外键、父子关系或跨类引用';
+    ? t('res.erEdges', edges.length)
+    : t('res.erNoEdges');
 
   return {
     kind: 'mermaid',
-    title: `ER 图 — ${schema}.${table}`,
+    title: t('res.erTitle', schema, table),
     subtitle: relNote,
     mermaid: lines.join('\n') + '\n' + detail,
     meta: {
@@ -441,7 +442,7 @@ async function runSample(cfg: ConnConfig, schema: string, table: string, limit: 
   const res = await postQuery(cfg, sql, 120000);
   return {
     kind: 'table',
-    title: `${schema}.${table} 前 ${res.rows.length} 行`,
+    title: t('res.sampleTitle', schema, table, res.rows.length),
     subtitle: sql,
     headers: res.headers,
     rows: res.rows,
@@ -454,13 +455,28 @@ export async function execute(cfg: ConnConfig, req: OpRequest): Promise<OpResult
   switch (req.op) {
     case 'namespaces': {
       const list = await namespaces(cfg);
-      return { kind: 'table', title: `命名空间（${list.length}）`, headers: ['命名空间'], rows: list.map((n) => [n]) };
+      return {
+        kind: 'table',
+        title: t('res.nsTitle', list.length),
+        headers: [t('hdr.namespace')],
+        rows: list.map((n) => [n]),
+      };
     }
     case 'describe': {
       const { schema, table, cls } = await locate(cfg, req.table || '', req.schema);
       const parsed = await parseClassSchema(cfg, schema, table, cls);
       // 列顺序与 iris-schema 技能的 describe 输出保持一致
-      const headers = ['#', '属性名', '属性类型', '字段名', '类型', '长度', 'PK', '说明', 'Global位置'];
+      const headers = [
+        t('hdr.no'),
+        t('hdr.propName'),
+        t('hdr.propType'),
+        t('hdr.fieldName'),
+        t('hdr.type'),
+        t('hdr.length'),
+        t('hdr.pk'),
+        t('hdr.note'),
+        t('hdr.globalPos'),
+      ];
       const rows = parsed.rows.map((r, i) => [
         // 与技能一致：行号用连续序号（RowID 的 col 为 0，ParRef 为 1.5，直接显示会很怪）
         String(i + 1),
@@ -476,7 +492,12 @@ export async function execute(cfg: ConnConfig, req: OpRequest): Promise<OpResult
       return {
         kind: 'table',
         title: `${schema}.${table}`,
-        subtitle: `类定义 ${parsed.class}　·　存储 ${parsed.storage || '-'}　·　数据 Global ${parsed.ref || parsed.global || '-'}`,
+        subtitle: t(
+          'res.udlSubDetail',
+          parsed.class,
+          parsed.storage || '-',
+          parsed.ref || parsed.global || '-'
+        ),
         headers,
         rows,
         meta: {
@@ -498,8 +519,8 @@ export async function execute(cfg: ConnConfig, req: OpRequest): Promise<OpResult
       const lines = await fetchClassUdl(cfg, cls!);
       return {
         kind: 'code',
-        title: `类定义 — ${cls}`,
-        subtitle: `${schema}.${table}　·　${lines.length} 行`,
+        title: t('res.udlTitle', cls!),
+        subtitle: t('res.udlSub', schema, table, lines.length),
         code: lines.join('\n'),
         language: 'objectscript',
       };
@@ -520,12 +541,12 @@ export async function execute(cfg: ConnConfig, req: OpRequest): Promise<OpResult
       return runFindColumn(cfg, req.keyword || req.table || '', limit);
     case 'sql': {
       const sql = (req.sql || '').trim().replace(/;\s*$/, '');
-      if (!sql) throw new Error('请输入 SQL');
+      if (!sql) throw new Error(t('err.needSql'));
       assertReadonly(sql);
       const res = await postQuery(cfg, sql, 180000);
       return {
         kind: 'table',
-        title: `查询结果（${res.rows.length} 行）`,
+        title: t('res.sqlTitle', res.rows.length),
         subtitle: sql.length > 160 ? sql.slice(0, 160) + '…' : sql,
         headers: res.headers,
         rows: res.rows,
@@ -535,16 +556,16 @@ export async function execute(cfg: ConnConfig, req: OpRequest): Promise<OpResult
       const res = await postQuery(cfg, 'SELECT 1 AS OK');
       return {
         kind: 'kv',
-        title: '连接正常',
+        title: t('res.testTitle'),
         items: [
-          { k: '目标', v: `${cfg.protocol}://${cfg.host}:${cfg.web_port}` },
-          { k: '命名空间', v: cfg.namespace },
-          { k: '账号', v: cfg.user },
-          { k: '探测结果', v: res.rows[0]?.[0] ?? 'OK' },
+          { k: t('res.testTarget'), v: `${cfg.protocol}://${cfg.host}:${cfg.web_port}` },
+          { k: t('res.testNamespace'), v: cfg.namespace },
+          { k: t('res.testUser'), v: cfg.user },
+          { k: t('res.testProbe'), v: res.rows[0]?.[0] ?? 'OK' },
         ],
       };
     }
     default:
-      throw new Error(`不支持的操作：${req.op}`);
+      throw new Error(t('err.unsupportedOp', req.op));
   }
 }

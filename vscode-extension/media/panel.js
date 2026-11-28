@@ -1,6 +1,44 @@
 /* global acquireVsCodeApi */
 (function () {
   /**
+   * 词条表由扩展侧注入（panel.ts 里渲染 HTML 时写入 `window.__I18N__`），
+   * webview 这边不重复维护一份文案。直接双击打开导出的 HTML 调试样式时没有这张表，
+   * 退化成显示 key 本身——布局看得清，也能看出哪条漏注入。
+   */
+  const MSG = (typeof window !== 'undefined' && window.__I18N__) || {};
+
+  /** 取词条并替换 {0} {1} 占位符。 */
+  function t(key) {
+    let s = MSG[key];
+    if (s === undefined) return key;
+    for (let i = 1; i < arguments.length; i++) {
+      s = s.split('{' + (i - 1) + '}').join(String(arguments[i]));
+    }
+    return s;
+  }
+
+  /**
+   * 按「当前语言的那条列头文案」生成正则，用来认列。
+   *
+   * 原来这里写的是 `/^(表名|table)$/i` 这类中英双分支的硬编码正则，
+   * 双语化之后就成了隐患：实际列头来自 t('hdr.table')，只要哪天把中文
+   * 从「表名」改成「表」，或者英文从 "Table" 改成 "Table name"，
+   * 正则就会静默失配 —— 表格不会报错，只是列宽分配、行点击跳转、
+   * 等宽字体统统失效，很难发现。改成从词条表反查，改文案只改 i18n.ts 一处。
+   *
+   * 拿不到词条（没注入 __I18N__，比如浏览器里直接打开导出的 HTML）时
+   * 返回一个永不匹配的正则，交给调用处的兜底逻辑处理。
+   */
+  function matchHeader(key) {
+    const label = MSG[key];
+    if (typeof label !== 'string' || !label) return /(?!)/;
+    return new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+  }
+
+  /** 用等宽字体显示的列头：属性名/类型这类标识符，等宽更好对齐比较。 */
+  const MONO_HEADERS = ['hdr.propName', 'hdr.propType', 'hdr.fieldName', 'hdr.type', 'hdr.length'];
+
+  /**
    * 真实宿主里 acquireVsCodeApi 一定存在。但在浏览器里直接打开导出页
    * （调试布局/样式）时它没有，若直接调用会让整个 IIFE 抛错、页面全白。
    * 这里退化成内存态：能看能点，只是后端消息石沉大海。
@@ -100,15 +138,15 @@
     });
     // 模式决定输入框提示语
     const hints = {
-      describe: '表名 / 类名，如 SQLUser.Patient',
-      udl: '类名，如 HS.BL.Patient',
-      er: '表名，如 SQLUser.Patient',
-      sample: '表名，取前 N 行',
-      tables: '可为空，或输入表名关键字',
-      findColumn: '列名关键字，如 UpdateDate',
-      ddl: '表名，生成 CREATE TABLE',
-      sql: '在下方输入 SQL',
-      test: '可为空，直接测试连接',
+      describe: t('ph.describe'),
+      udl: t('ph.udl'),
+      er: t('ph.er'),
+      sample: t('ph.sample'),
+      tables: t('ph.tables'),
+      findColumn: t('ph.findColumn'),
+      ddl: t('ph.ddl'),
+      sql: t('ph.sql'),
+      test: t('ph.test'),
     };
     el.keyword.placeholder = hints[m] || hints.describe;
     el.keyword.disabled = m === 'sql';
@@ -130,13 +168,13 @@
   function run() {
     const profile = el.profileSel.value;
     if (!profile) {
-      toast('没有可用的连接配置');
+      toast(t('toast.noProfiles'));
       return;
     }
     const keyword = el.keyword.value.trim();
     const needName = ['describe', 'udl', 'er', 'sample', 'ddl'].includes(mode);
     if (needName && !keyword) {
-      toast('请填写表名 / 类名');
+      toast(t('toast.needTable'));
       el.keyword.focus();
       return;
     }
@@ -155,7 +193,7 @@
   function runSql() {
     const sql = el.sqlInput.value.trim();
     if (!sql) {
-      toast('请输入 SQL');
+      toast(t('toast.needSql'));
       return;
     }
     vscode.postMessage({
@@ -201,21 +239,23 @@
   function renderProfiles(msg) {
     profiles = msg.profiles || [];
     if (!profiles.length) {
-      el.profileSel.innerHTML = `<option value="">无连接配置</option>`;
+      el.profileSel.innerHTML = `<option value="">${t('guide.noneOption')}</option>`;
       el.result.innerHTML =
-        `<div class="err">未找到连接配置。<br><br>` +
-        `这是个 VS Code 扩展，优先读 VS Code 设置里的 <b>intersystems.servers</b>` +
-        `（装了 InterSystems 插件后由 Server Manager 维护）。在 <b>settings.json</b> 里加一段即可：<br><br>` +
+        `<div class="err">${t('guide.noProfiles')}<br><br>` +
+        t('guide.noProfilesDetail') +
+        `<br><br>` +
         `<pre class="code">"intersystems.servers": {<br>` +
         `  "dev": {<br>` +
         `    "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },<br>` +
         `    "username": "user", "password": "pass",<br>` +
-        `    "description": "开发库"<br>` +
+        `    "description": "${t('guide.exampleDesc')}"<br>` +
         `  }<br>` +
         `}</pre>` +
-        `<br>命名空间可在条目里加 <b>"namespace": "APP"</b>，不写则默认 <b>%SYS</b>` +
-        `（下次会记住你选过的库）。<br><br>` +
-        `也支持 <b>~/.iris-schema.json</b>（与 iris-schema 技能共用），两边同名时以 VS Code 设置为准。</div>`;
+        `<br>` +
+        t('guide.namespaceTip') +
+        `<br><br>` +
+        t('guide.fileTip') +
+        `</div>`;
       return;
     }
     const want = msg.state?.profile || savedState.profile || msg.default;
@@ -224,15 +264,15 @@
         // 标签只用「名字 · 描述」，避免下拉太宽；来源用 title 提示
         const label = p.description ? `${p.name} · ${p.description}` : `${p.name} · ${p.host}`;
         const tip = p.origin === 'vscode'
-          ? `来自 VS Code 设置 intersystems.servers\n${p.protocol}://${p.host}:${p.port}`
-          : `来自配置文件\n${p.protocol}://${p.host}:${p.port}`;
+          ? `${t('target.fromVscode')}\n${p.protocol}://${p.host}:${p.port}`
+          : `${t('target.fromFile')}\n${p.protocol}://${p.host}:${p.port}`;
         return `<option value="${esc(p.name)}" title="${esc(tip)}"${p.name === want ? ' selected' : ''}>${esc(label)}</option>`;
       })
       .join('');
     const cur = profiles.find((p) => p.name === el.profileSel.value) || profiles[0];
     el.nsSel.innerHTML = `<option value="${esc(cur.namespace)}">${esc(cur.namespace)}</option>`;
-    el.targetInfo.textContent = `${cur.protocol}://${cur.host}:${cur.port}　账号 ${cur.user}` +
-      (msg.configPath ? `　配置 ${msg.configPath}` : '');
+    el.targetInfo.textContent = `${cur.protocol}://${cur.host}:${cur.port}　${t('target.account')} ${cur.user}` +
+      (msg.configPath ? `　${t('target.config')} ${msg.configPath}` : '');
     vscode.postMessage({ type: 'loadNamespaces', profile: el.profileSel.value });
   }
 
@@ -247,19 +287,42 @@
 
   // ------------------------------------------------------------ 渲染结果
 
+  /** 上一次查询的耗时（ms），用于状态栏前缀。 */
+  let lastElapsed = null;
+  /** 当前结果的可见行数 / 总行数；不含 rows 的结果（代码、ER 图）为 null。 */
+  let lastRowCount = null;
+  let lastRowTotal = null;
+
+  function updateElapsed() {
+    if (lastElapsed === null) return;
+    let text = t('status.elapsed', lastElapsed);
+    if (lastRowCount !== null) {
+      text += '　' + (lastRowCount === lastRowTotal ? lastRowCount : lastRowCount + ' / ' + lastRowTotal);
+      text += ' ' + t('common.rows');
+    }
+    el.elapsed.textContent = text;
+  }
+
   function renderResult(msg) {
     const r = msg.result;
-    el.elapsed.textContent = `${msg.elapsed} ms　${r.rows ? r.rows.length + ' 行' : ''}`;
+    // 行数拆成独立变量维护：后缀跟着过滤结果变化，
+    // 不能用正则去改 el.elapsed.textContent —— 那个正则依赖中文「行」字，
+    // 换成英文（"rows"）后匹配不上，过滤时行数就不会更新。
+    lastElapsed = msg.elapsed;
+    const total = (r.rows || []).length;
+    lastRowTotal = total;
+    lastRowCount = r.rows ? total : null;
+    updateElapsed();
     if (msg.target) {
       el.targetInfo.textContent = `${msg.target.profile}　${msg.target.host}:${msg.target.port}　${msg.target.namespace}`;
     }
     const head = document.createElement('div');
     head.className = 'result-head';
     const actions = [];
-    if (r.kind === 'code') actions.push(`<button data-act="open">在编辑器中打开</button>`);
-    if (r.kind === 'code' && metaClass(r)) actions.push(`<button data-act="save">保存为 .cls</button>`);
-    if (r.kind === 'table') actions.push(`<button data-act="csv">导出 CSV</button>`);
-    if (r.code || r.mermaid) actions.push(`<button data-act="copy">复制</button>`);
+    if (r.kind === 'code') actions.push(`<button data-act="open">${t('act.openInEditor')}</button>`);
+    if (r.kind === 'code' && metaClass(r)) actions.push(`<button data-act="save">${t('act.saveCls')}</button>`);
+    if (r.kind === 'table') actions.push(`<button data-act="csv">${t('act.exportCsv')}</button>`);
+    if (r.code || r.mermaid) actions.push(`<button data-act="copy">${t('act.copy')}</button>`);
     head.innerHTML =
       `<span class="result-title">${esc(r.title || '')}</span>` +
       (r.subtitle ? `<span class="result-sub">${esc(r.subtitle)}</span>` : '') +
@@ -282,7 +345,7 @@
         body.appendChild(renderKv(r.items || []));
         break;
       default:
-        body.innerHTML = `<div class="empty">${esc(r.text || '无结果')}</div>`;
+        body.innerHTML = `<div class="empty">${esc(r.text || t('body.noResult'))}</div>`;
     }
 
     // describe 附带索引与外键小节
@@ -315,11 +378,15 @@
         setMode('describe');
         run();
       });
-    }  }
+    }
+  }
 
   function metaClass(r) {
-    const m = /^类定义 — (\S+)/.exec(r.title || '');
-    return m ? m[1] : null;
+    // 从 meta 里直接取，不再解析标题文本。
+    // 原来用 /^类定义 — (\S+)/ 从 title 里抠类名，一旦界面换成英文
+    // （"Class definition — ..."）就整个失效，"保存为 .cls" 按钮会消失。
+    if (r && r.meta && r.meta.cls) return r.meta.cls;
+    return null;
   }
 
   function suggestedCls(r) {
@@ -343,17 +410,23 @@
     const headers = r.headers || [];
     const rows = r.rows || [];
     if (!rows.length) {
-      wrap.innerHTML = `<div class="empty">没有数据</div>`;
+      wrap.innerHTML = `<div class="empty">${t('body.noData')}</div>`;
       return wrap;
     }
     const tbl = document.createElement('table');
     tbl.className = 'grid';
 
-    // 选一列作为弹性列（吃掉剩余宽度），优先长文本列，避免短列占掉大块宽度
-    const growPriority = [/^(表名|table)$/i, /说明|desc/i, /global|位置/i];
+    // 选一列作为弹性列（吃掉剩余宽度），优先长文本列，避免短列占掉大块宽度。
+    // 每一档是一个正则数组：词条表里的当前语言列头 + 几个兜底写法
+    // （自定义 SQL 的返回列名不受我们控制，可能压根不叫「说明」）。
+    const growPriority = [
+      [matchHeader('hdr.table')],
+      [matchHeader('hdr.note'), /desc/i],
+      [matchHeader('hdr.globalPos'), /global|位/i],
+    ];
     let growCol = -1;
-    for (const re of growPriority) {
-      const i = headers.findIndex((h) => re.test(h));
+    for (const group of growPriority) {
+      const i = headers.findIndex((h) => group.some((re) => re.test(h)));
       if (i >= 0) {
         growCol = i;
         break;
@@ -393,7 +466,7 @@
 
     // 可跳转的列（Schema + 表名 组合）
     const iSchema = headers.findIndex((h) => /^schema$/i.test(h));
-    const iTable = headers.findIndex((h) => /^(表名|table)$/i.test(h));
+    const iTable = headers.findIndex((h) => matchHeader('hdr.table').test(h));
 
     // 若第一列本身就是 "#"，不再额外加行号列，避免出现两个 #
     const hasOwnIndex = headers.length > 0 && /^#$/.test(headers[0]);
@@ -406,8 +479,8 @@
         numericCols.has(c) ? 'num' : '',
         /^#$/.test(h) ? 'col-idx' : '',
         c === growCol ? 'grow' : '',
-        /global|位置/i.test(h) ? 'mono' : '',
-        /^(属性名|属性类型|字段名|类型|长度)$/i.test(h) ? 'mono' : '',
+        matchHeader('hdr.globalPos').test(h) || /global|位置/i.test(h) ? 'mono' : '',
+        MONO_HEADERS.some((k) => matchHeader(k).test(h)) ? 'mono' : '',
       ]
         .filter(Boolean)
         .join(' ')
@@ -432,7 +505,7 @@
       // sortable 是排序行为的钩子（同时给样式定位），其余是既有列修饰
       th.className = 'sortable' + (c === growCol ? ' grow' : '') + (/^pk$/i.test(h) ? ' col-pk' : '');
       th.dataset.col = String(c);
-      th.title = '点击排序：升序 / 降序 / 取消';
+      th.title = t('table.sortTip');
 
       const bar = document.createElement('div');
       bar.className = 'th-bar';
@@ -448,7 +521,7 @@
       const inp = document.createElement('input');
       inp.type = 'text';
       inp.className = 'col-filter';
-      inp.placeholder = '过滤';
+      inp.placeholder = t('table.filterPlaceholder');
       inp.dataset.col = String(c);
       inp.spellcheck = false;
 
@@ -521,7 +594,7 @@
         // 重绘必须把 data-jump 写回去：行点击是委托在父容器上的（见 renderResult），
         // 一旦丢了属性，排完序再点行就静默失效。
         const attrs = jumpable
-          ? ` class="clickable" data-jump="${escAttr(JSON.stringify([row[iSchema], row[iTable]]))}" title="点击查看表结构"`
+          ? ` class="clickable" data-jump="${escAttr(JSON.stringify([row[iSchema], row[iTable]]))}" title="${t('table.jumpTip')}"`
           : '';
         const cells = hasOwnIndex
           ? []
@@ -536,7 +609,7 @@
       });
       tbody.innerHTML =
         html.join('') ||
-        `<tr><td class="grid-empty" colspan="${headers.length + (hasOwnIndex ? 0 : 1)}">没有匹配的行</td></tr>`;
+        `<tr><td class="grid-empty" colspan="${headers.length + (hasOwnIndex ? 0 : 1)}">${t('body.noMatch')}</td></tr>`;
 
       thList.forEach((th, c) => {
         th.classList.toggle('sort-asc', c === state.sortCol && state.sortDir === 1);
@@ -544,11 +617,9 @@
         th.classList.toggle('filtered', !!String(state.filters[c] || '').trim());
       });
       // 行数跟着过滤走：没过滤显示「5 行」，过滤后显示「2 / 5 行」
-      if (el.elapsed.textContent) {
-        el.elapsed.textContent = el.elapsed.textContent.replace(
-          /　?[\d ]+(?: \/ [\d ]+)? 行$/,
-          list.length === rows.length ? `　${rows.length} 行` : `　${list.length} / ${rows.length} 行`
-        );
+      if (lastRowCount !== null) {
+        lastRowCount = list.length;
+        updateElapsed();
       }
     }
 
@@ -616,7 +687,7 @@
       sec.className = 'section';
       const notes = (idx.notes || []).map((n) => `<li>⚠ ${esc(n)}</li>`).join('');
       sec.innerHTML =
-        `<h3>索引（${idx.rows.length}）　存储 ${esc(idx.storage || '-')}　类型 ${idx.kind === 'sql' ? '自定义 SQL 存储' : '默认存储'}</h3>` +
+        `<h3>${t('table.indexTitle', idx.rows.length)}　${t('table.storage', esc(idx.storage || '-'))}　${idx.kind === 'sql' ? t('table.kindSql') : t('table.kindDefault')}</h3>` +
         `<div class="body"><ul>` +
         idx.rows
           .map((r) => `<li><b>${esc(r.name)}</b>　<span class="muted" style="font-family:monospace">${esc(r.structure)}</span></li>`)
@@ -638,8 +709,8 @@
         ? `<li class="muted">Relationship：${rels.map((r) => `${esc(r.prop)} → ${esc(r.ref)}`).join('；')}</li>`
         : '';
       sec.innerHTML =
-        `<h3>外键 / 关系（${fks.length} 个外键，${rels.length} 个关系）</h3>` +
-        `<div class="body"><ul>${fkList || '<li class="muted">无显式 ForeignKey</li>'}${relList}</ul></div>`;
+        `<h3>${t('table.fkTitle', fks.length, rels.length)}</h3>` +
+        `<div class="body"><ul>${fkList || `<li class="muted">${t('table.noFk')}</li>`}${relList}</ul></div>`;
       frag.appendChild(sec);
     }
     return frag;
@@ -662,7 +733,7 @@
       const sec = document.createElement('div');
       sec.className = 'section';
       sec.style.margin = '16px 0 0';
-      sec.innerHTML = `<h3>Global 位置</h3><div class="body"><pre class="code" style="padding:0">${esc(notes.join('\n'))}</pre></div>`;
+      sec.innerHTML = `<h3>${t('table.globalTitle')}</h3><div class="body"><pre class="code" style="padding:0">${esc(notes.join('\n'))}</pre></div>`;
       wrap.appendChild(sec);
     }
 
@@ -686,11 +757,11 @@
       .catch((e) => {
         // 之前这里一律说"可能是离线环境"，但真正失败最常见的原因是 mermaid 语法。
         // 离线只是一种可能，把 err.message 原文露出来才查得动。
-        const msg = (e && (e.message || e.str || String(e))) || '未知错误';
+        const msg = (e && (e.message || e.str || String(e))) || t('common.unknownError');
         holder.innerHTML = '';
         const box = document.createElement('div');
         box.className = 'err';
-        box.textContent = `Mermaid 渲染失败：${msg}`;
+        box.textContent = `${t('mermaid.failed', msg)}`;
         holder.appendChild(box);
 
         // 是解析错误就明说"离线"不是原因，省得往网络方向排查
@@ -698,8 +769,8 @@
         hint.className = 'muted';
         hint.style.margin = '8px 0';
         hint.textContent = /parse error|expecting|lexical/i.test(msg)
-          ? '这是图定义语法错误，与网络无关。'
-          : '图和脚本都是本地打包的，离线不影响渲染；若这里报加载失败，说明扩展文件缺失。';
+          ? t('mermaid.syntaxHint')
+          : t('mermaid.offlineHint');
         holder.appendChild(hint);
 
         const pre = document.createElement('pre');
@@ -722,7 +793,7 @@
       const txt = (el.textContent || '').trim();
       if (!txt) continue;
       const flat = txt.split(/\s+/)[0];
-      if (aliases[flat]) el.setAttribute('title', `原类型：${aliases[flat]}`);
+      if (aliases[flat]) el.setAttribute('title', `${t('table.originalType', aliases[flat])}`);
     }
   }
 
@@ -738,8 +809,8 @@
       // 兜底：本地文件意外缺失时才走 CDN（内网环境通常会失败）
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
-      s.onload = () => (window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid 未就绪')));
-      s.onerror = () => reject(new Error('加载 mermaid 失败'));
+      s.onload = () => (window.mermaid ? resolve(window.mermaid) : reject(new Error(t('toast.mermaidNotReady'))));
+      s.onerror = () => reject(new Error(t('toast.mermaidLoadFailed')));
       document.head.appendChild(s);
     });
     return mermaidPromise;
@@ -754,7 +825,7 @@
     const rows = wrap && wrap.__visibleRows ? wrap.__visibleRows() : r.rows || [];
     const lines = [(r.headers || []).map(q).join(',')].concat(rows.map((row) => row.map(q).join(',')));
     vscode.postMessage({ type: 'copy', text: '\uFEFF' + lines.join('\r\n') });
-    toast(rows.length === (r.rows || []).length ? `CSV 已复制（${rows.length} 行）` : `CSV 已复制（当前可见 ${rows.length} 行）`);
+    toast(rows.length === (r.rows || []).length ? t('toast.csvCopied', rows.length) : t('toast.csvCopiedVisible', rows.length));
   }
 
   // ------------------------------------------------------------ 错误 / 提示

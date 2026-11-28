@@ -51,7 +51,12 @@ const fakeVscode = {
     openTextDocument: async () => ({}),
   },
   commands: { registerCommand: () => ({ dispose() {} }) },
-  env: { clipboard: { writeText: async () => undefined } },
+  env: {
+    clipboard: { writeText: async () => undefined },
+    // 界面语言：默认中文，与下游 e2e-panel 的测试数据（中文列头）对齐。
+    // 用 IRIS_TEST_LANG=en 可以导出一份英文版 HTML，用来肉眼比对两种语言下的布局。
+    language: process.env.IRIS_TEST_LANG || 'zh-cn',
+  },
   Disposable: class { dispose() {} },
 };
 
@@ -63,6 +68,12 @@ Module._resolveFilename = function (request, ...rest) {
 require.cache['vscode-fake'] = { id: 'vscode-fake', filename: 'vscode-fake', loaded: true, exports: fakeVscode };
 
 const { IrisPanel } = require(path.join(EXT_ROOT, 'out', 'panel.js'));
+
+// renderHtml 会把 getLanguage() 写进 <html lang> 并据此注入词条表，
+// 这里显式初始化一次，避免依赖 i18n 内部的默认值。
+const i18n = require(path.join(EXT_ROOT, 'out', 'i18n.js'));
+i18n.setLanguage(i18n.detectLanguage(fakeVscode.env.language));
+console.log(`界面语言：${i18n.getLanguage()}`);
 
 // ---- 构造一个最简 panel / ctx ----
 const webview = {

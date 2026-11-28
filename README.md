@@ -8,8 +8,7 @@ A VS Code extension for browsing InterSystems IRIS table structures, class defin
 
 | 文档 | 内容 |
 |---|---|
-| [README.md](vscode-extension/README.md) | 功能与使用说明（中文） |
-| [README.en.md](vscode-extension/README.en.md) | Features and usage (English) |
+| [README.md](vscode-extension/README.md) | 功能与使用说明（中英对照 / bilingual） |
 | [DEVELOPMENT.md](vscode-extension/DEVELOPMENT.md) | 实现要点、验证脚本、打包流程 |
 
 ## 安装

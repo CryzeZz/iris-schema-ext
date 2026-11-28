@@ -1,0 +1,9 @@
+{
+  "ext.description": "浏览与查询 InterSystems IRIS 表结构、类定义与 ER 图",
+  "view.welcome.name": "查询",
+  "view.welcome.contents": "在这里浏览与查询 InterSystems IRIS 的表结构、类定义与 ER 图。\n\n连接信息直接读取 VS Code 设置里的 `intersystems.servers`（Server Manager）。\n\n[打开查询面板](command:irisSchema.openPanel)\n[重新加载连接配置](command:irisSchema.refreshConnections)\n\n也可以在任意 `.cls` 文件里点编辑器标题栏的图标打开。",
+  "cmd.openPanel.title": "打开查询面板",
+  "cmd.refreshConnections.title": "重新加载连接配置",
+  "config.configPath.description": "补充连接配置文件路径。留空则使用 ~/.iris-schema.json（与 iris-schema 技能共用）。服务器连接以 VS Code 设置 intersystems.servers 为主来源，两边的同名服务器会合并，缺失字段（如 namespace）由此文件补齐。",
+  "config.sampleLimit.description": "查询数据时默认返回的行数上限"
+}

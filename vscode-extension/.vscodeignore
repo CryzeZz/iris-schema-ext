@@ -29,6 +29,10 @@ package-lock.json
 # 开发文档：面向贡献者，装在用户的 VS Code 里没有意义
 DEVELOPMENT.md
 
+# 注意：package.nls.json / package.nls.zh-cn.json 必须打进包里。
+# package.json 的文案是 %key% 形式，这两个文件缺失的话 VS Code 会把占位符
+# 原样显示在命令标题和设置项上。不要往这里加通配。
+
 # 图标源图与多余尺寸：扩展只用 media/iris-schema@256.png（package.json 的 icon 与面板标题栏），
 # activity.svg 是活动栏图标。其余尺寸只在设计时看效果，打进包只是白占体积。
 media/icon-marketplace.png

@@ -26,6 +26,15 @@ const OUT = path.join(EXT_ROOT, 'screenshots');
 const PORT = 8933;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
 
+// 断言里要用的界面文案从词条表取，不写死字面量 —— 这样同一套断言
+// 在中英两种语言下都能跑（IRIS_TEST_LANG=zh-cn / en）。
+// 语言必须与 render-panel.js 生成 panel-real.html 时用的一致，否则断言查的
+// 是另一种语言的文案，而页面里渲染的是另一种，必挂。
+const i18n = require(path.join(EXT_ROOT, 'out', 'i18n.js'));
+const LANG = (process.env.IRIS_TEST_LANG || 'zh-cn').startsWith('zh') ? 'zh' : 'en';
+i18n.setLanguage(LANG);
+const msg = (k, ...a) => i18n.t(k, ...a);
+
 // ---------------------------------------------------------------- 假数据
 const TARGET = { profile: '138', namespace: 'APP', host: 'iris.example.com', port: 52773 };
 
@@ -47,7 +56,7 @@ const RES_DESCRIBE = {
   result: {
     kind: 'table',
     title: 'SQLUser.ARC_Alias',
-    headers: ['列名', '类型', '主键', '说明', 'Global 位置'],
+    headers: [msg('hdr.column'), msg('hdr.type'), msg('hdr.pk'), msg('hdr.note'), msg('hdr.globalPos')],
     rows: [
       ['ARCIM_RowId', 'numeric', 'PK', 'RowID', '$P(^ARC("ALIAS",ARCIM_RowId))'],
       ['ARCIM_Desc', '%String(60)', '', '别名描述', '$P(^ARC("ALIAS",ARCIM_RowId),"^",2)'],
@@ -122,13 +131,16 @@ const RES_SAMPLE = {  type: 'result',
   target: TARGET,
 };
 
-// tables 模式：有 Schema + 表名，行可点击跳转（用来验证重绘后 data-jump 还在）
+// tables 模式：有 Schema + 表名，行可点击跳转（用来验证重绘后 data-jump 还在）。
+// 列头必须用当前语言的词条，不能用中文字面量 —— panel.js 的跳转判定是拿
+// t('hdr.table') 去比对列头，英文界面下渲染的是 "Table"，数据里若还写「表名」
+// 就永远对不上，行点击静默失效。这恰恰是这次双语化要防的那类问题。
 const RES_TABLES = {
   type: 'result',
   result: {
     kind: 'table',
     title: '表列表',
-    headers: ['Schema', '表名', '类型'],
+    headers: [msg('hdr.schema'), msg('hdr.table'), msg('hdr.type')],
     rows: [
       ['SQLUser', 'ARC_Alias', 'table'],
       ['SQLUser', 'ARCItmMast', 'table'],
@@ -204,6 +216,7 @@ function makeScenario(name, mode, resKey, waitMs, actions) {
     "    elapsed: e ? e.textContent : '',",
     "    target: g ? g.textContent : '',",
     "    sent: window.__sent.map(function (m) { return m.type; }),",
+    '    errs: window.__ERRS,',
     "    snippet: (t.textContent || '').replace(/\\\\s+/g, ' ').slice(0, 90)",
     '  });',
     '};',
@@ -214,6 +227,12 @@ function makeScenario(name, mode, resKey, waitMs, actions) {
     '<script nonce="' + nonce + '">',
     '(function () {',
     '  window.__sent = [];',
+    // 收集页面内未捕获错误。渲染分支抛错时表格会是空的，
+    // 但标题只显示 "RPT:{...}" —— 没有这一层，看到的只有
+    // 「tableRows=0」这种结果，查不到根因。
+    '  window.__ERRS = [];',
+    "  window.addEventListener('error', function (e) { window.__ERRS.push(String(e.message)); });",
+    "  window.addEventListener('unhandledrejection', function (e) { window.__ERRS.push('REJ: ' + String(e.reason)); });",
     '  var state = {};',
     '  window.acquireVsCodeApi = function () {',
     '    return {',
@@ -291,14 +310,16 @@ const CASES = [
       "if (inp) { inp.value = '不存在的东西'; inp.dispatchEvent(new Event('input', { bubbles: true })); }",
     ],
   },
-  // 行点击跳转：重绘后 data-jump 必须还在，否则委托失效
+  // 行点击跳转：重绘后 data-jump 必须还在，否则委托失效。
+  // 排序点哪一列不重要（只要有列在变），这里点第 1 个可排序列，位置与语言无关。
+  // 关键是要在「重绘之后」点行 —— data-jump 写不回 td 的话，这里就跳不动。
   {
     name: 'jump',
     mode: 'tables',
     res: 'RES_TABLES',
     wait: 400,
     actions: [
-      "var th = document.querySelectorAll('th.sortable')[1];",
+      "var th = document.querySelectorAll('th.sortable')[0];",
       'if (th) th.click();',            // 先排序，逼表格走一次重绘
       "var tr = document.querySelector('tbody tr[data-jump]');",
       'if (tr) tr.click();',            // 再点行
@@ -356,15 +377,18 @@ const CASES = [
     // ---- 列过滤：说明列含「别名」的只有 2 行
     ['过滤后只剩 2 行', () => reports.filter.tableRows === 2],
     ['过滤命中的都含别名', () => (reports.filter.rows || []).every((r) => r.join('').includes('别名'))],
-    ['行数提示显示 2 / 5', () => /2 \/ 5 行/.test(reports.filter.elapsed)],
+    // 行数后缀跟语言走：中文「2 / 5 行」，英文「2 / 5 rows」。
+    // 这里写死过 /2 \/ 5 行/，英文渲染下必然失败 —— 失败原因跟行数无关。
+    ['行数提示显示 2 / 5', () => /\b2 \/ 5\b/.test(reports.filter.elapsed)],
+    ['行数单位跟语言一致', () => reports.filter.elapsed.includes(msg('common.rows'))],
 
     // ---- 核心约束：排序/过滤不允许触发新的后端请求
     ['排序未发起新查询', () => (reports.sort.afterQuery || []).length === 0],
     ['过滤未发起新查询', () => (reports.filter.afterQuery || []).length === 0],
 
     // ---- 边界：过滤到 0 行要有占位，不能只剩空壳
-    ['过滤无命中时显示占位行', () => (reports.nohit.rows || []).some((r) => r.join('').includes('没有匹配的行'))],
-    ['无命中时提示 0 / 5 行', () => /0 \/ 5 行/.test(reports.nohit.elapsed)],
+    ['过滤无命中时显示占位行', () => (reports.nohit.rows || []).some((r) => r.join('').includes(msg('body.noMatch')))],
+    ['无命中时提示 0 / 5 行', () => /\b0 \/ 5\b/.test(reports.nohit.elapsed)],
 
     // ---- 回归：排序重绘之后，行点击跳转仍然有效（data-jump 必须写回）
     ['排序重绘后行仍可跳转', () => (reports.jump.afterQuery || []).includes('query')],

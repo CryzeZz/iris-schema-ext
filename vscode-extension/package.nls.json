@@ -1,0 +1,9 @@
+{
+  "ext.description": "Browse and query InterSystems IRIS table schema, class definitions and ER diagrams",
+  "view.welcome.name": "Query",
+  "view.welcome.contents": "Browse and query InterSystems IRIS table schema, class definitions and ER diagrams.\n\nConnections are read from the `intersystems.servers` setting (Server Manager).\n\n[Open Query Panel](command:irisSchema.openPanel)\n[Reload Connections](command:irisSchema.refreshConnections)\n\nYou can also open it from the editor title bar of any `.cls` file.",
+  "cmd.openPanel.title": "Open Query Panel",
+  "cmd.refreshConnections.title": "Reload Connections",
+  "config.configPath.description": "Path to an extra connection file. Left empty, ~/.iris-schema.json is used (shared with the iris-schema skill). Server connections come primarily from the intersystems.servers setting; entries with the same name are merged, and missing fields (such as namespace) are filled in from this file.",
+  "config.sampleLimit.description": "Maximum number of rows returned when querying data"
+}

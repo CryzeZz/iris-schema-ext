@@ -1,8 +1,12 @@
 import * as vscode from 'vscode';
 import { IrisPanel } from './panel';
 import { loadProfiles, resetProfileCache } from './config';
+import { detectLanguage, getLanguage, setLanguage, t } from './i18n';
 
 export function activate(context: vscode.ExtensionContext): void {
+  // 界面语言跟随 VS Code：zh* 用中文，其余用英文。只需在激活时判定一次。
+  setLanguage(detectLanguage(vscode.env.language));
+
   context.subscriptions.push(
     vscode.commands.registerCommand('irisSchema.openPanel', () => {
       IrisPanel.createOrShow(context);
@@ -11,12 +15,10 @@ export function activate(context: vscode.ExtensionContext): void {
       resetProfileCache();
       const src = loadProfiles();
       if (!src.profiles.length) {
-        vscode.window.showWarningMessage(
-          '未找到连接配置：在 VS Code 设置里添加 intersystems.servers，或创建 ~/.iris-schema.json'
-        );
+        vscode.window.showWarningMessage(t('notice.noProfiles'));
       } else {
-        const from = src.vscodePath || src.path || '未知来源';
-        vscode.window.showInformationMessage(`已加载 ${src.profiles.length} 个连接（${from}）`);
+        const from = src.vscodePath || src.path || t('notice.unknownSource');
+        vscode.window.showInformationMessage(t('notice.profilesLoaded', src.profiles.length, from));
       }
       IrisPanel.current?.reloadProfiles();
     }),
@@ -54,11 +56,11 @@ class SidebarWelcomeProvider implements vscode.WebviewViewProvider {
     const from = src.vscodePath || src.path || '';
 
     const status = count
-      ? `<p class="ok">已读取 ${count} 个连接</p><p class="dim">${esc(from)}</p>`
-      : `<p class="warn">未找到连接配置</p>
-         <p class="dim">在 settings.json 里添加 <code>intersystems.servers</code></p>`;
+      ? `<p class="ok">${t('sidebar.connected', count)}</p><p class="dim">${esc(from)}</p>`
+      : `<p class="warn">${t('sidebar.notConfigured')}</p>
+         <p class="dim">${t('sidebar.addServer')}</p>`;
 
-    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+    return `<!DOCTYPE html><html lang="${htmlLang()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
 <style>
   body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);
@@ -79,11 +81,11 @@ class SidebarWelcomeProvider implements vscode.WebviewViewProvider {
   button.sec:hover{background:var(--vscode-button-secondaryHoverBackground)}
 </style></head><body>
   <h3>iris schema</h3>
-  <p>浏览表结构、类定义、ER 图，并采样表数据。</p>
+  <p>${t('sidebar.desc')}</p>
   ${status}
-  <button id="open">打开查询面板</button>
-  <button id="reload" class="sec">重新加载连接配置</button>
-  <p class="dim" style="margin-top:14px">也可以在任意 <code>.cls</code> 文件里点编辑器标题栏的图标。</p>
+  <button id="open">${t('sidebar.open')}</button>
+  <button id="reload" class="sec">${t('sidebar.reload')}</button>
+  <p class="dim" style="margin-top:14px">${t('sidebar.hint')}</p>
   <script>
     const api = acquireVsCodeApi();
     document.getElementById('open').onclick = () => api.postMessage({ type: 'open' });
@@ -91,6 +93,11 @@ class SidebarWelcomeProvider implements vscode.WebviewViewProvider {
   </script>
 </body></html>`;
   }
+}
+
+/** `<html lang>` 跟着界面语言走，影响断行和字数统计这类排版细节。 */
+function htmlLang(): string {
+  return getLanguage() === 'zh' ? 'zh-CN' : 'en';
 }
 
 function esc(s: string): string {

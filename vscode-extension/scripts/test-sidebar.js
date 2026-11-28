@@ -94,6 +94,7 @@ fs.writeFileSync(
   fakePath,
   `global.__cmds = [];
    module.exports = {
+     env: { language: process.env.IRIS_TEST_LANG || 'zh-cn' },
      window: { registerWebviewViewProvider: (id, prov) => { global.__prov = prov; return { dispose() {} }; } },
      commands: {
        registerCommand: () => ({ dispose() {} }),
@@ -144,12 +145,25 @@ const cap = renderWith(
   'settings.json › intersystems.servers'
 );
 const withCfg = cap.html || '';
-ok(/已读取 2 个连接/.test(withCfg), '有配置时显示连接数量');
+
+// 文案断言从词条表取，不写死中文字面量。
+// 原来这里写的是 /已读取 2 个连接/ —— 界面双语化之后，英文环境下这条必然失败，
+// 但失败原因跟侧边栏渲染无关。改成按当前语言的词条来断言，两种语言下都验证真实文案。
+// 语言由 IRIS_TEST_LANG 环境变量决定（默认 zh-cn，与 fake vscode 里的 env.language 一致）。
+const i18n = require(path.join(root, 'out', 'i18n.js'));
+const LANG = (process.env.IRIS_TEST_LANG || 'zh-cn').startsWith('zh') ? 'zh' : 'en';
+i18n.setLanguage(LANG);
+const msg = (k, ...a) => i18n.t(k, ...a);
+console.log(`  （当前断言语言：${LANG}）`);
+
+ok(withCfg.includes(msg('sidebar.connected', 2)), '有配置时显示连接数量', msg('sidebar.connected', 2));
 ok(/intersystems\.servers/.test(withCfg), '显示配置来源');
 ok(/acquireVsCodeApi\(\)/.test(withCfg), '含 acquireVsCodeApi');
 ok(/Content-Security-Policy/.test(withCfg), '含 CSP');
 ok(/id="open"/.test(withCfg) && /id="reload"/.test(withCfg), '两个按钮都在');
 ok(/<h3>iris schema<\/h3>/.test(withCfg), '侧边栏标题用新名 iris schema');
+// <html lang> 跟着界面语言走
+ok(withCfg.includes(`<html lang="${LANG === 'zh' ? 'zh-CN' : 'en'}"`), '<html lang> 跟随界面语言', LANG);
 
 // 按钮能点的前提有三个，缺一个就静默失效：
 //   a) enableScripts 必须 true —— 否则 <script> 整段不执行
@@ -176,7 +190,7 @@ ok(global.__cmds.length === 0, '未知消息不误触发命令');
 
 const noCfgCap = renderWith([], null);
 const noCfg = noCfgCap.html || '';
-ok(/未找到连接配置/.test(noCfg), '无配置时提示未找到');
+ok(noCfg.includes(msg('sidebar.notConfigured')), '无配置时提示未找到', msg('sidebar.notConfigured'));
 ok(/intersystems\.servers/.test(noCfg), '无配置时给出配置指引');
 // 无配置不应因为 from 为 null 渲染出 "null" 字样
 ok(!/>null</.test(noCfg), '来源为空时不渲染 null');
