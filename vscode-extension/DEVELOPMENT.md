@@ -259,7 +259,7 @@ node scripts/shot-narrow-th.js          # 量 380 / 520 下表头过滤框是否
 
 ```bash
 npm run package          # 产出 iris-schema-<版本>.vsix，版本取自 package.json
-code --install-extension iris-schema-1.0.0.vsix --force
+code --install-extension iris-schema-<版本>.vsix --force
 ```
 
 扩展标识是 `CryzeZz.iris-schema`，由 `package.json` 的 `publisher` 和 `name` 拼成。改 `publisher` 相当于换了一个新扩展，旧标识下装的那份不会被覆盖，要先卸载：
