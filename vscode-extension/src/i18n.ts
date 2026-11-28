@@ -29,6 +29,10 @@ export type MsgKey =
   | 'notice.unknownSource'
   | 'notice.copied'
   | 'notice.busy'
+  | 'notice.passwordSaved'
+  | 'notice.passwordForgotten'
+  | 'notice.passwordCleared'
+  | 'notice.passwordNoneToClear'
   // ---- 侧边栏 ----
   | 'sidebar.desc'
   | 'sidebar.connected'
@@ -52,6 +56,7 @@ export type MsgKey =
   | 'menu.ddl'
   | 'menu.sql'
   | 'menu.test'
+  | 'menu.password'
   // ---- 面板：SQL 栏 / 状态栏 / 占位 ----
   | 'sql.placeholder'
   | 'sql.run'
@@ -171,7 +176,26 @@ export type MsgKey =
   | 'err.sqlFailed'
   | 'err.sqlEmpty'
   | 'err.locateClass'
-  | 'err.noClassForTable';
+  | 'err.noClassForTable'
+  // ---- 密码 / keychain ----
+  | 'pwd.title'
+  | 'pwd.prompt'
+  | 'pwd.placeholder'
+  | 'pwd.remember'
+  | 'pwd.rememberYes'
+  | 'pwd.rememberYesDesc'
+  | 'pwd.rememberNo'
+  | 'pwd.rememberNoDesc'
+  | 'pwd.rememberTitle'
+  | 'pwd.invalid'
+  | 'pwd.cancelled'
+  | 'pwd.reasonNoUser'
+  | 'pwd.reasonExpired'
+  | 'pwd.keychainUnavailable'
+  | 'pwd.clearConfirm'
+  | 'pwd.clearConfirmYes'
+  | 'pwd.notSet'
+  | 'pwd.inConfig';
 
 /** 词条表。两个语言必须同时覆盖全部 key（由 Record<MsgKey, string> 保证）。 */
 const ZH: Record<MsgKey, string> = {
@@ -185,6 +209,10 @@ const ZH: Record<MsgKey, string> = {
   'notice.unknownSource': '未知来源',
   'notice.copied': '已复制到剪贴板',
   'notice.busy': '上一次查询还在进行中…',
+  'notice.passwordSaved': '密码已保存到系统钥匙串',
+  'notice.passwordForgotten': '已删除 {0} 的密码',
+  'notice.passwordCleared': '已清除 {0} 条密码记录',
+  'notice.passwordNoneToClear': '没有可清除的密码记录',
 
   'sidebar.desc': '浏览表结构、类定义、ER 图，并采样表数据。',
   'sidebar.connected': '已读取 {0} 个连接',
@@ -208,6 +236,7 @@ const ZH: Record<MsgKey, string> = {
   'menu.ddl': '生成建表 DDL',
   'menu.sql': '自由 SQL',
   'menu.test': '测试连接',
+  'menu.password': '设置密码…',
 
   'sql.placeholder': '-- 仅支持 SELECT / WITH 只读查询\nSELECT TOP 50 * FROM SQLUser.Patient',
   'sql.run': '执行',
@@ -328,6 +357,25 @@ const ZH: Record<MsgKey, string> = {
   'err.sqlEmpty': 'SQL 返回结果为空',
   'err.locateClass': '定位类定义失败（{0}.{1}）：{2}',
   'err.noClassForTable': '未找到表 {0}.{1} 对应的类定义（确认表名或 schema 是否正确）',
+
+  'pwd.title': '密码',
+  'pwd.prompt': '{0}@{1} 的密码',
+  'pwd.placeholder': '密码（留空表示无密码账号）',
+  'pwd.remember': '是否保存到系统钥匙串？',
+  'pwd.rememberYes': '记住密码',
+  'pwd.rememberYesDesc': '保存到系统钥匙串，下次不再询问',
+  'pwd.rememberNo': '仅本次会话',
+  'pwd.rememberNoDesc': '不落盘，关闭 VS Code 后失效',
+  'pwd.rememberTitle': '保存密码',
+  'pwd.invalid': '未设置密码',
+  'pwd.cancelled': '已取消输入密码',
+  'pwd.reasonNoUser': '未配置用户名',
+  'pwd.reasonExpired': '密码可能已失效',
+  'pwd.keychainUnavailable': '系统钥匙串不可用，密码只保存在本次会话内（Linux 需安装 libsecret）',
+  'pwd.clearConfirm': '确定清除已保存的 {0} 个连接的密码？下次连接时会重新询问。',
+  'pwd.clearConfirmYes': '清除',
+  'pwd.notSet': '未设置密码',
+  'pwd.inConfig': '密码在配置文件中',
 };
 
 const EN: Record<MsgKey, string> = {
@@ -341,6 +389,10 @@ const EN: Record<MsgKey, string> = {
   'notice.unknownSource': 'unknown source',
   'notice.copied': 'Copied to clipboard',
   'notice.busy': 'A previous query is still running…',
+  'notice.passwordSaved': 'Password saved to the OS keychain',
+  'notice.passwordForgotten': 'Password for {0} removed',
+  'notice.passwordCleared': 'Cleared {0} stored password(s)',
+  'notice.passwordNoneToClear': 'No stored passwords to clear',
 
   'sidebar.desc': 'Browse table structures, class definitions and ER diagrams, and sample table data.',
   'sidebar.connected': '{0} connection(s) loaded',
@@ -364,6 +416,7 @@ const EN: Record<MsgKey, string> = {
   'menu.ddl': 'Generate CREATE TABLE DDL',
   'menu.sql': 'Free-form SQL',
   'menu.test': 'Test connection',
+  'menu.password': 'Set password…',
 
   'sql.placeholder': '-- Read-only: SELECT / WITH only\nSELECT TOP 50 * FROM SQLUser.Patient',
   'sql.run': 'Run',
@@ -484,6 +537,25 @@ const EN: Record<MsgKey, string> = {
   'err.sqlEmpty': 'SQL returned an empty result',
   'err.locateClass': 'Failed to locate class definition ({0}.{1}): {2}',
   'err.noClassForTable': 'No class definition found for table {0}.{1} (check the table name or schema)',
+
+  'pwd.title': 'Password',
+  'pwd.prompt': 'Password for {0}@{1}',
+  'pwd.placeholder': 'Password (leave empty for passwordless accounts)',
+  'pwd.remember': 'Store the password in the OS keychain?',
+  'pwd.rememberYes': 'Remember password',
+  'pwd.rememberYesDesc': 'Save to the OS keychain and stop asking',
+  'pwd.rememberNo': 'This session only',
+  'pwd.rememberNoDesc': 'Not persisted; lost when VS Code exits',
+  'pwd.rememberTitle': 'Save password',
+  'pwd.invalid': 'Password not set',
+  'pwd.cancelled': 'Password entry cancelled',
+  'pwd.reasonNoUser': 'No username configured',
+  'pwd.reasonExpired': 'Password may have expired',
+  'pwd.keychainUnavailable': 'OS keychain unavailable; passwords will only be kept for this session (Linux needs libsecret)',
+  'pwd.clearConfirm': 'Clear the stored password(s) for {0} connection(s)? You will be asked again on the next connect.',
+  'pwd.clearConfirmYes': 'Clear',
+  'pwd.notSet': 'password not set',
+  'pwd.inConfig': 'password in config file',
 };
 
 const TABLES: Record<Lang, Record<MsgKey, string>> = { zh: ZH, en: EN };

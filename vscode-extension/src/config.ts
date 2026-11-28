@@ -21,6 +21,10 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { ConnConfig } from './irisClient';
+import { getStoredPassword, invalidateSessionPassword } from './secrets';
+
+/** 密码从哪来。面板据此决定要不要标"未设置密码"。 */
+export type PwdSource = 'keychain' | 'config' | 'none';
 
 export interface ProfileEntry extends ConnConfig {
   profile: string;
@@ -28,6 +32,11 @@ export interface ProfileEntry extends ConnConfig {
   namespaceExplicit?: boolean;
   /** 来源，用于界面上区分「来自 VS Code」和「来自技能配置」 */
   origin?: 'vscode' | 'file';
+  /**
+   * 密码来源。`config` 指明文写在 settings.json / 配置文件里，
+   * `keychain` 指从系统钥匙串取出（此时 `password` 已被替换成真实值）。
+   */
+  passwordSource?: PwdSource;
 }
 
 export interface ProfileSource {
@@ -291,6 +300,50 @@ function mergeProfiles(vscodeList: ProfileEntry[], fileList: ProfileEntry[]): Pr
 // ---------------------------------------------------------------- 对外接口
 
 let _cache: ProfileSource | null = null;
+
+/**
+ * 扩展上下文。config.ts 原本是纯函数模块（不依赖 vscode 运行时状态），
+ * 但读 keychain 必须拿到 `ExtensionContext.secrets`，只能由 activate 时注入。
+ * 没注入时（脚本、单元测试）自动降级为只读配置里的明文。
+ */
+let _ctx: vscode.ExtensionContext | null = null;
+
+export function setExtensionContext(ctx: vscode.ExtensionContext): void {
+  _ctx = ctx;
+}
+
+/**
+ * 把 keychain 里的密码覆盖到 profile 上。
+ *
+ * 这一步是异步的（keychain 是异步 IO），而 `loadProfiles()` 被大量同步调用点
+ * 依赖，所以拆成显式的第二步：调用方拿到 ProfileSource 后调一次这里，
+ * 拿到的 ProfileEntry 里 `password` 已是最终值。
+ *
+ * 优先级：keychain > 配置里的明文。理由见 secrets.ts 的模块头注释。
+ */
+export async function applyStoredPasswords(source: ProfileSource): Promise<ProfileSource> {
+  if (!_ctx) {
+    for (const p of source.profiles) p.passwordSource = p.password ? 'config' : 'none';
+    return source;
+  }
+  await Promise.all(
+    source.profiles.map(async (p) => {
+      const stored = await getStoredPassword(_ctx!, p.host, p.web_port, p.user);
+      if (stored !== null) {
+        p.password = stored;
+        p.passwordSource = 'keychain';
+      } else {
+        p.passwordSource = p.password ? 'config' : 'none';
+      }
+    })
+  );
+  return source;
+}
+
+/** 服务端返回 401 后调用：让本次会话缓存的密码失效，下次会重新读 keychain / 重新弹框。 */
+export function forgetSessionPassword(p: ProfileEntry): void {
+  invalidateSessionPassword(p.host, p.web_port, p.user);
+}
 
 /** 读取全部可用连接（带缓存，面板频繁重建时不必反复读盘）。 */
 export function loadProfiles(): ProfileSource {

@@ -2,10 +2,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
-import { findProfile, loadProfilesCached, ProfileEntry } from './config';
+import { applyStoredPasswords, findProfile, loadProfilesCached, ProfileEntry } from './config';
 import { execute, OpRequest } from './ops';
 import { logout, namespaces, ConnConfig } from './irisClient';
 import { allMessages, getLanguage, t } from './i18n';
+import { promptPassword, savePassword } from './secrets';
 
 interface PanelState {
   profile: string | null;
@@ -88,11 +89,16 @@ export class IrisPanel {
   /** 命令 "重新加载连接配置" 后调用。 */
   reloadProfiles(): void {
     this.nsCache.clear();
-    this.post({ type: 'profiles', ...this.profilePayload() });
+    void this.pushProfiles();
   }
 
-  private profilePayload() {
-    const src = loadProfilesCached();
+  /** 重新读配置 + keychain 后推给前端。keychain 是异步的，所以这里也异步。 */
+  private async pushProfiles(): Promise<void> {
+    this.post({ type: 'profiles', ...(await this.profilePayload()) });
+  }
+
+  private async profilePayload() {
+    const src = await applyStoredPasswords(loadProfilesCached());
     return {
       profiles: src.profiles.map((p) => ({
         name: p.profile,
@@ -104,6 +110,9 @@ export class IrisPanel {
         namespace: this.preferredNs(p.profile, p.namespace),
         description: p.description || '',
         origin: p.origin || 'file',
+        // 只暴露「有没有密码、从哪来」，绝不把密码本身发给 webview：
+        // webview 是浏览器上下文，密码进去就等于落到 DOM/DevTools 里。
+        passwordSource: p.passwordSource || 'none',
       })),
       default: src.defaultProfile,
       configPath: src.vscodePath || src.path || null,
@@ -115,8 +124,9 @@ export class IrisPanel {
     void this.panel.webview.postMessage(msg);
   }
 
-  private resolveProfile(name: string | null): ProfileEntry {
-    const src = loadProfilesCached();
+  /** 按名字取 profile，并叠加 keychain 里的密码。 */
+  private async resolveProfile(name: string | null): Promise<ProfileEntry> {
+    const src = await applyStoredPasswords(loadProfilesCached());
     const p = findProfile(src, name);
     if (!p) {
       const err: any = new Error(t('err.noProfile'));
@@ -126,24 +136,103 @@ export class IrisPanel {
     return p;
   }
 
-  private connCfg(profile: string | null, namespace: string | null): ConnConfig {
-    const p = this.resolveProfile(profile);
+  /** 拼出可直接发请求的 ConnConfig：账号密码齐全，命名空间已定。 */
+  private async connCfg(profile: string | null, namespace: string | null): Promise<ConnConfig> {
+    const p = await this.resolveProfile(profile);
     const cfg: ConnConfig = { ...p, namespace: namespace || p.namespace };
     delete (cfg as any).profile;
+    delete (cfg as any).passwordSource;
+    delete (cfg as any).namespaceExplicit;
+    delete (cfg as any).origin;
     return cfg;
+  }
+
+  /**
+   * 确保拿到密码再发请求。
+   *
+   * 三种情况：
+   * 1. 已从 keychain / 配置拿到密码 → 直接用；
+   * 2. 没账号（user 为空）→ 报错，让用户先去配；
+   * 3. 有账号没密码 → 弹框输入。
+   *
+   * 为什么第 3 种要弹框而不是直接拿空密码去请求：IRIS 对空密码返回 401，
+   * 界面上只显示"认证失败"，用户根本看不出是"没配密码"还是"密码错了"。
+   * 弹框把这件事变成一次明确的输入，也顺便给了保存到 keychain 的机会。
+   */
+  private async ensurePassword(p: ProfileEntry, reason?: string): Promise<ConnConfig> {
+    if (!p.user) {
+      const err: any = new Error(t('pwd.reasonNoUser'));
+      err.code = 'NO_USER';
+      throw err;
+    }
+    if (!p.password) {
+      const value = await promptPassword(this.ctx, {
+        profile: p.profile,
+        user: p.user,
+        host: p.host,
+        port: p.web_port,
+        reason,
+      });
+      // 取消必须中止：拿空密码去请求只会换来一个看不懂的 401
+      if (value === undefined) {
+        const err: any = new Error(t('pwd.cancelled'));
+        err.code = 'PWD_CANCELLED';
+        throw err;
+      }
+      p.password = value;
+      p.passwordSource = 'keychain';
+    }
+    const cfg: ConnConfig = { ...p, namespace: p.namespace };
+    delete (cfg as any).profile;
+    delete (cfg as any).passwordSource;
+    delete (cfg as any).namespaceExplicit;
+    delete (cfg as any).origin;
+    return cfg;
+  }
+
+  /**
+   * 带凭据重试一次的执行封装。
+   *
+   * 首次请求如果因为密码失效被拒（401），会重新弹框问一次密码 ——
+   * 这是"密码改了但 keychain 里还是旧的"最常见的表现，用户不必自己
+   * 去翻菜单找"设置密码"。
+   */
+  private async executeWithAuth(
+    profile: string | null,
+    namespace: string | null,
+    req: OpRequest
+  ): Promise<{ cfg: ConnConfig; result: Awaited<ReturnType<typeof execute>> }> {
+    const p = await this.resolveProfile(profile);
+    p.namespace = namespace || p.namespace;
+    const cfg = await this.ensurePassword(p);
+    try {
+      return { cfg, result: await execute(cfg, req) };
+    } catch (e) {
+      if (!isAuthError(e)) throw e;
+      // 密码失效：清掉该账号的会话缓存，重新问一遍
+      const old = cfg.password;
+      p.password = '';
+      p.passwordSource = 'none';
+      const retryCfg = await this.ensurePassword(p, t('pwd.reasonExpired'));
+      if (retryCfg.password === old) throw e;
+      return { cfg: retryCfg, result: await execute(retryCfg, req) };
+    }
   }
 
   private async onMessage(msg: any): Promise<void> {
     try {
       switch (msg?.type) {
         case 'ready':
-          this.post({ type: 'profiles', ...this.profilePayload() });
+          await this.pushProfiles();
           return;
         case 'loadNamespaces':
           await this.loadNamespaces(msg.profile);
           return;
         case 'query':
           await this.runQuery(msg);
+          return;
+        case 'setPassword':
+          await this.setPassword(msg.profile);
           return;
         case 'copy':
           await vscode.env.clipboard.writeText(String(msg.text || ''));
@@ -159,22 +248,49 @@ export class IrisPanel {
           return;
       }
     } catch (e) {
+      // 用户主动取消输入密码不是错误，别在结果区糊一片红
+      if ((e as any)?.code === 'PWD_CANCELLED') {
+        this.post({ type: 'toast', text: (e as Error).message });
+        return;
+      }
       this.post({ type: 'error', text: (e as Error).message || String(e), candidates: (e as any).candidates });
     }
   }
 
+  /** 菜单里的「设置密码…」：直接重置该账号的密码，不管原来有没有。 */
+  private async setPassword(profile: string | null): Promise<void> {
+    const p = await this.resolveProfile(profile);
+    if (!p.user) {
+      this.post({ type: 'error', text: t('pwd.reasonNoUser') });
+      return;
+    }
+    const value = await promptPassword(this.ctx, {
+      profile: p.profile,
+      user: p.user,
+      host: p.host,
+      port: p.web_port,
+    });
+    if (value === undefined) return;
+    // promptPassword 内部已按用户选择写入 keychain 或会话缓存；
+    // 这里再补一次"会话级"确认，确保本次运行立即生效（即使选了不记住）。
+    await savePassword(this.ctx, p.host, p.web_port, p.user, value, true);
+    // 密码换了，之前的会话 cookie 必然失效
+    this.nsCache.clear();
+    await logout({ ...p, password: value } as ConnConfig).catch(() => undefined);
+    this.post({ type: 'toast', text: t('notice.passwordSaved') });
+    await this.pushProfiles();
+  }
+
   private async loadNamespaces(profile: string | null): Promise<void> {
-    const p = this.resolveProfile(profile);
+    const p = await this.resolveProfile(profile);
     const want = this.preferredNs(p.profile, p.namespace);
     const cached = this.nsCache.get(p.profile);
     if (cached) {
       this.post({ type: 'namespaces', profile: p.profile, namespaces: cached, current: want });
       return;
     }
-    const cfg: ConnConfig = { ...p };
-    delete (cfg as any).profile;
     // 列命名空间本身也走 Atelier，需要一个能用的库；优先用用户上次的选择
-    cfg.namespace = want;
+    const cfg = await this.ensurePassword({ ...p, namespace: want });
     const list = await namespaces(cfg);
     this.nsCache.set(p.profile, list);
     this.post({ type: 'namespaces', profile: p.profile, namespaces: list, current: want });
@@ -189,14 +305,13 @@ export class IrisPanel {
     this.state = { profile, namespace, mode, keyword };
     // 记住这次用的库，下次打开面板直接回到这里
     this.rememberNs(profile, namespace);
-    const cfg = this.connCfg(profile, namespace);
 
     this.busy = true;
     this.post({ type: 'busy', on: true });
     const started = Date.now();
     try {
       const req: OpRequest = this.buildRequest(msg);
-      const result = await execute(cfg, req);
+      const { cfg, result } = await this.executeWithAuth(profile, namespace, req);
       const elapsed = Date.now() - started;
       this.post({
         type: 'result',
@@ -316,6 +431,7 @@ export class IrisPanel {
       <button data-mode="ddl">${t('menu.ddl')}</button>
       <button data-mode="sql">${t('menu.sql')}</button>
       <button data-mode="test">${t('menu.test')}</button>
+      <button data-mode="password" id="setPwdBtn">${t('menu.password')}</button>
     </div>
   </header>
 
@@ -358,6 +474,9 @@ export class IrisPanel {
     if (p) {
       const cfg: ConnConfig = { ...p, namespace: this.state.namespace || p.namespace };
       delete (cfg as any).profile;
+      delete (cfg as any).passwordSource;
+      delete (cfg as any).namespaceExplicit;
+      delete (cfg as any).origin;
       void logout(cfg).catch(() => undefined);
     }
     this.panel.dispose();
@@ -366,6 +485,17 @@ export class IrisPanel {
       d?.dispose();
     }
   }
+}
+
+/**
+ * 这个错误是不是「账号密码不对」。
+ *
+ * 只看 HttpError 的 status，不看 message —— message 已经本地化，
+ * 中文环境以「认证」开头、英文以 "auth" 开头，靠文本判断一定有一边失效。
+ */
+function isAuthError(e: unknown): boolean {
+  const status = (e as any)?.status;
+  return status === 401 || status === 403;
 }
 
 function makeNonce(): string {

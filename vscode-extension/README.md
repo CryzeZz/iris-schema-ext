@@ -92,11 +92,30 @@ The extension prefers `intersystems.servers` from VS Code settings. If the Inter
   "dev": {
     "webServer": { "scheme": "https", "host": "iris.example.com", "port": 52773 },
     "username": "_SYSTEM",
-    "password": "******",
     "description": "Development"
   }
 }
 ```
+
+**`password` 可以不写。** 第一次连这台服务器时会弹出输入框，勾选「记住密码」就存进系统钥匙串（Windows 凭据管理器 / macOS Keychain / Linux libsecret），之后不再询问，配置文件里也不需要出现明文。
+
+**`password` may be omitted.** The first time you connect, the extension asks for it; choose "Remember password" and it is stored in the OS keychain (Windows Credential Manager / macOS Keychain / Linux libsecret). You will not be asked again, and no plaintext password needs to exist in any config file.
+
+密码来源的优先级是「钥匙串 > 配置里的明文」：已经有明文密码的老配置照常能用，但只要输过一次并选择记住，钥匙串里的值就会接管。状态栏会标出当前用的是哪种 —— 「密码在配置文件中」说明这条连接的明文密码还留在配置里，可以考虑删掉。
+
+Password priority is "keychain > plaintext in config": existing configs with a plaintext password keep working, but once you enter a password and choose to remember it, the keychain value takes over. The status bar tells you which one is in use — "password in config file" means a plaintext password is still sitting in your settings.
+
+密码存在 VS Code 的 `SecretStorage` 里，它**按扩展隔离** —— 本插件读不到 InterSystems 扩展存的密码，反之亦然。这是有意为之：跨扩展读取只能调对方的私有 API，对方一升级就可能失效，也不该动别人的私有数据。
+
+Passwords live in VS Code's `SecretStorage`, which is **isolated per extension** — this extension cannot read the passwords the InterSystems extension stored, and vice versa. That is deliberate: cross-extension access would mean calling another extension's private API, which can break on any upgrade, and it is not our data to touch.
+
+想彻底忘掉这些密码，执行命令 **iris schema: 清除已保存的密码**。直接改 `settings.json` 是清不掉的，因为密码根本不在那里。
+
+To wipe them, run **iris schema: Clear Stored Passwords**. Editing `settings.json` will not do it — the passwords are not stored there.
+
+在面板右上角的 **⋯** 菜单里可以给当前服务器重新设置密码（用于密码改了、或者想从明文迁移到钥匙串）。
+
+The **⋯** menu in the panel toolbar lets you set a new password for the current server — useful when the password changed, or when migrating away from a plaintext one.
 
 如果之前用过 `iris-schema` 技能，插件也会读 `~/.iris-schema.json`，两份配置按服务器名合并：同名的以 VS Code 设置为准，VS Code 里缺的字段（比如 `namespace`）用配置文件补齐，两边各自独有的服务器都会列出来。
 

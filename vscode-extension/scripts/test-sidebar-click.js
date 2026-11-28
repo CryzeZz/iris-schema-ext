@@ -29,6 +29,7 @@ fs.writeFileSync(
   fakePath,
   `global.__cmds=[];
    module.exports={
+     env:{language:process.env.IRIS_TEST_LANG||'zh-cn'},
      window:{registerWebviewViewProvider:(id,p)=>{global.__prov=p;return{dispose(){}}}},
      commands:{registerCommand:()=>({dispose(){}}),executeCommand:(c)=>{global.__cmds.push(c);return Promise.resolve()}},
      workspace:{getConfiguration:()=>({get:(_k,d)=>d,inspect:()=>undefined})},

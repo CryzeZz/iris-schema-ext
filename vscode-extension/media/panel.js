@@ -99,6 +99,11 @@
     const btn = e.target.closest('button[data-mode]');
     if (!btn) return;
     el.moreMenu.classList.add('hidden');
+    // 「设置密码」不是查询模式，不能走 setMode + run 那条路
+    if (btn.dataset.mode === 'password') {
+      vscode.postMessage({ type: 'setPassword', profile: el.profileSel.value });
+      return;
+    }
     setMode(btn.dataset.mode);
     if (btn.dataset.mode === 'sql') {
       el.sqlBar.classList.remove('hidden');
@@ -125,6 +130,7 @@
   el.profileSel.addEventListener('change', () => {
     const p = profiles.find((x) => x.name === el.profileSel.value);
     el.nsSel.innerHTML = `<option value="${esc(p ? p.namespace : '')}">${esc(p ? p.namespace : '')}</option>`;
+    updateTargetInfo(null);
     vscode.postMessage({ type: 'loadNamespaces', profile: el.profileSel.value });
     persist();
   });
@@ -269,11 +275,31 @@
         return `<option value="${esc(p.name)}" title="${esc(tip)}"${p.name === want ? ' selected' : ''}>${esc(label)}</option>`;
       })
       .join('');
-    const cur = profiles.find((p) => p.name === el.profileSel.value) || profiles[0];
-    el.nsSel.innerHTML = `<option value="${esc(cur.namespace)}">${esc(cur.namespace)}</option>`;
-    el.targetInfo.textContent = `${cur.protocol}://${cur.host}:${cur.port}　${t('target.account')} ${cur.user}` +
-      (msg.configPath ? `　${t('target.config')} ${msg.configPath}` : '');
+    updateTargetInfo(msg);
     vscode.postMessage({ type: 'loadNamespaces', profile: el.profileSel.value });
+  }
+
+  /**
+   * 状态栏左边那条：地址 · 账号 · 配置来源，以及"密码从哪来"。
+   *
+   * 密码本身永远不进 webview，这里只显示有没有：
+   *   - keychain → 不额外提示（正常状态，噪音越少越好）
+   *   - config   → 显示「密码在配置文件中」，这是在提醒用户明文密码的位置
+   *   - none     → 显示「未设置密码」，第一次查询时会弹框
+   */
+  function updateTargetInfo(msg) {
+    const cur = profiles.find((p) => p.name === el.profileSel.value) || profiles[0];
+    if (!cur) return;
+    let text = `${cur.protocol}://${cur.host}:${cur.port}　${t('target.account')} ${cur.user}`;
+    if (cur.passwordSource === 'config') text += `　${t('pwd.inConfig')}`;
+    else if (cur.passwordSource === 'none') text += `　${t('pwd.notSet')}`;
+    if (msg && msg.configPath) text += `　${t('target.config')} ${msg.configPath}`;
+    el.targetInfo.textContent = text;
+    // 供「切换服务器后提示是否跟着更新」这类回归断言读取。
+    // textContent 读不到「这条属于哪个服务器」，断言只能拿整串去猜，
+    // 结果就是同一串文字换个来源就误判 —— 把口径写进 DOM 最省事。
+    el.targetInfo.dataset.profile = cur.name;
+    el.targetInfo.dataset.pwd = cur.passwordSource || 'none';
   }
 
   function renderNamespaces(msg) {

@@ -19,6 +19,7 @@
   "activationEvents": [
     "onCommand:irisSchema.openPanel",
     "onCommand:irisSchema.refreshConnections",
+    "onCommand:irisSchema.clearPasswords",
     "onView:irisSchema.welcome"
   ],
   "main": "./out/extension.js",
@@ -56,6 +57,11 @@
       {
         "command": "irisSchema.refreshConnections",
         "title": "%cmd.refreshConnections.title%",
+        "category": "iris schema"
+      },
+      {
+        "command": "irisSchema.clearPasswords",
+        "title": "%cmd.clearPasswords.title%",
         "category": "iris schema"
       }
     ],

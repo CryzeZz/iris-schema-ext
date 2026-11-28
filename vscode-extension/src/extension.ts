@@ -1,11 +1,15 @@
 import * as vscode from 'vscode';
 import { IrisPanel } from './panel';
-import { loadProfiles, resetProfileCache } from './config';
+import { loadProfiles, resetProfileCache, setExtensionContext } from './config';
 import { detectLanguage, getLanguage, setLanguage, t } from './i18n';
+import { forgetAllPasswords } from './secrets';
 
 export function activate(context: vscode.ExtensionContext): void {
   // 界面语言跟随 VS Code：zh* 用中文，其余用英文。只需在激活时判定一次。
   setLanguage(detectLanguage(vscode.env.language));
+
+  // 读 keychain 要用 context.secrets，config.ts 自己拿不到，只能在这里注入。
+  setExtensionContext(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('irisSchema.openPanel', () => {
@@ -20,6 +24,31 @@ export function activate(context: vscode.ExtensionContext): void {
         const from = src.vscodePath || src.path || t('notice.unknownSource');
         vscode.window.showInformationMessage(t('notice.profilesLoaded', src.profiles.length, from));
       }
+      IrisPanel.current?.reloadProfiles();
+    }),
+
+    /**
+     * 清空本插件存过的全部密码。
+     *
+     * 为什么要这个命令：密码进了系统钥匙串之后，用户就看不到它了 ——
+     * 换机器、离职交接、怀疑密码被记住了，都需要一个明确的"忘掉它"入口。
+     * 光靠改 settings.json 是清不掉的，因为密码根本不在那里。
+     */
+    vscode.commands.registerCommand('irisSchema.clearPasswords', async () => {
+      const src = loadProfiles();
+      if (!src.profiles.length) {
+        void vscode.window.showInformationMessage(t('notice.passwordNoneToClear'));
+        return;
+      }
+      const pick = await vscode.window.showWarningMessage(
+        t('pwd.clearConfirm', src.profiles.length),
+        { modal: true },
+        t('pwd.clearConfirmYes')
+      );
+      if (!pick) return;
+      const n = await forgetAllPasswords(context, src.profiles);
+      resetProfileCache();
+      void vscode.window.showInformationMessage(t('notice.passwordCleared', n));
       IrisPanel.current?.reloadProfiles();
     }),
 

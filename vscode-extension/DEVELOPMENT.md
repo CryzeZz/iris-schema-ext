@@ -9,6 +9,7 @@ src/
   extension.ts     激活入口、命令注册、侧边栏
   panel.ts         查询面板：创建 webview、内联 CSS/JS、消息分发
   config.ts        连接配置加载与合并
+  secrets.ts       密码存取（系统钥匙串 / 会话内存）
   irisClient.ts    IRIS Atelier / Web 网关客户端
   ops.ts           各种查询的实现（表结构、类定义、ER、DDL 等）
   i18n.ts          界面文案的中英双语表
@@ -62,6 +63,26 @@ npm run compile     # 或 npm run watch
 - `irisClient.ts` 原本用 `e.message.startsWith('SQL 执行失败')` 识别业务错误 → 英文环境永远为假，业务错误被误当网络抖动重试 3 次。改成独立子类 `SqlError`。
 
 规律是一致的：**用结构（数据字段、错误类型）承载语义，不要用显示文本承载语义。**
+
+### 密码：自建 keychain 条目，不借别人的
+
+用户可以在 `intersystems.servers` / `~/.iris-schema.json` 里不写密码，第一次连接时弹框输入，选择「记住」就存进 `ExtensionContext.secrets`（底层是系统钥匙串）。
+
+**为什么不直接读 InterSystems 插件存的密码。** 它们用的是同一个 `SecretStorage`，但**按扩展隔离**：`cryzezz.iris-schema` 的 `context.secrets.get(...)` 只看得见自己写进去的键。想拿对方的密码只能 `getExtension('intersystems-community.servermanager').activate()` 再调 `exports.getServerSpec()` —— 那是没有类型声明、也没有稳定性承诺的私有 API（3.16.0 的 `getServerSpec` 已经变成 4 个位置参数了），对方随便发个小版本就可能断。自己存一份的代价只是第一次多输一次密码。
+
+**存储键与「主机:端口 + 账号（小写）」绑定**，不是只绑服务器名：
+
+```
+irisSchema.password:10.0.0.138:52773/_system
+```
+
+同一域名下挂多个实例（不同网关端口）、同一实例换账号登录都很常见，只按名字存会互相覆盖。
+
+**优先级：运行期缓存 > 钥匙串 > 配置明文。** 明文排最后是为了兼容老配置 —— 已经写了明文的用户升级后照常能用，但只要走过一次「记住密码」，钥匙串就接管了。`config.ts` 的 `applyStoredPasswords()` 负责这层覆盖，并把结果标进 `passwordSource`（`keychain` / `config` / `none`），面板据此在状态栏提示「未设置密码」或「密码在配置文件中」—— **密码本身永远不进 webview**，webview 是浏览器上下文，进去就等于落到 DOM 和 DevTools 里。
+
+**如果没拿到密码，弹框而不是拿空密码去请求。** 空密码发给 IRIS 只会得到 401，界面上显示「认证失败」，用户分不清是没配密码还是密码错了。`panel.ts` 的 `ensurePassword()` 把这件事变成一次明确的输入；用户点取消就直接中止本次查询。401 时的重试也走这里 —— 重新弹一次框，理由是「密码可能已失效」，这是「密码改了但钥匙串里还是旧的」最常见的表现。
+
+**`secrets` 在 Linux 上可能整个不可用**（没装 libsecret）。`secrets.ts` 里用 `keychainBroken` 标记一次性探测结果，之后全部降级到会话内存缓存，并只弹一次警告 —— 不这样做的话，每次查询都会弹同一个错误。
 
 ### 表结构不查 INFORMATION_SCHEMA
 
@@ -187,21 +208,37 @@ node scripts/smoke-ops.js 138              # profile 名取自 intersystems.serv
 node scripts/dump-udl.js 138 User.ARCAlias # 打印类定义原文
 node scripts/show-profiles.js              # 打印当前加载到的连接（含来源与 ns 是否显式）
 node scripts/test-config.js                # 4 个场景 21 项断言，覆盖合并 / 优先级 / 默认值
+node scripts/test-secrets.js               # 7 组场景：钥匙串优先级 / 不可用降级 / 键隔离 / 批量清除
+node scripts/test-nls.js                   # 8 个 nls 占位符在中英两种语言下都能解析
 ```
 
 ### 不需要 IRIS 的面板回归
 
 ```bash
 node scripts/render-panel.js        # 用假 vscode API 调 renderHtml，导出 panel-real.html，断言 CSP 与资源注入
-node scripts/test-panel-style.js    # 57 项样式断言：主题安全 / 令牌体系 / HC 适配 / Bootstrap 语言
-node scripts/e2e-panel.js           # 伪宿主灌数据，跑通四个视图 + 排序/过滤 + 行跳转，20 项断言
+node scripts/test-panel-style.js    # 60 项样式断言：主题安全 / 令牌体系 / HC 适配 / Bootstrap 语言
+node scripts/e2e-panel.js           # 伪宿主灌数据，跑通四个视图 + 排序/过滤 + 行跳转，24 项断言
 node scripts/shot-panel.js          # 无头 Chrome 截图空态
 node scripts/test-sidebar.js        # 侧边栏：命名 / 图标规范 / 两种配置状态 / 消息分发
 node scripts/test-sidebar-click.js  # 侧边栏按钮：无头 Chrome 真点一次，验证 postMessage 发出
+node scripts/shot-more-menu.js zh   # 截「⋯」菜单展开态，确认「设置密码…」没被裁掉（zh|en）
 node scripts/verify-er.js DHC_AntCVReport  # ER 图回归：断言无点号，并用真 mermaid 渲染一遍
 ```
 
 `e2e-panel.js` 把 `acquireVsCodeApi` 换成假实现，通过真实的 `message` 事件回灌数据，覆盖的是 `panel.js` 里真实的渲染分支（表格、代码块、mermaid SVG）。它会记录回灌之后新发出的消息，用来断言排序和过滤没有触发新的查询请求。
+
+`e2e-panel.js` / `test-sidebar.js` / `test-sidebar-click.js` 都支持 `IRIS_TEST_LANG=en`，用来验证英文界面。断言里的文案一律从 `i18n.t()` 取，不写中文字面量 —— 写死过一次 `/已读取 2 个连接/`，英文环境下必然失败，而失败原因跟被测逻辑毫无关系。
+
+**改过 `panel.ts` 或 `i18n.ts` 之后必须重新渲染再跑 e2e**：`panel-real.html` 是 `render-panel.js` 的产物，内联的是生成那一刻的 JS 和语言。忘了这一步的典型表现是——改的代码看着没生效，或者中文环境挂三条文案相关的断言、英文环境反而全绿（页面停在英文上，两边碰巧一致）。`e2e-panel.js` 开头会比对页面里的 `common.rows` 与本次 `IRIS_TEST_LANG`，不一致直接退出并提示该跑哪两条命令，不会再给出误导性的失败。
+
+正确的两步是：
+
+```bash
+npx tsc -p . && IRIS_TEST_LANG=zh-cn node scripts/render-panel.js
+IRIS_TEST_LANG=zh-cn node scripts/e2e-panel.js
+```
+
+状态栏的「密码来源」这类断言不能只查文字：`pwd.notSet` 的中英文串（"password not set"）也出现在引导文案里，只查 `textContent` 时切换没生效也能通过。`updateTargetInfo()` 会把当前服务器名和密码来源写进 `#targetInfo` 的 `dataset`，断言同时校验 `dataset.profile` / `dataset.pwd` 和文案，才真的在测「切换后提示跟着刷新」。
 
 ### 样式截图
 

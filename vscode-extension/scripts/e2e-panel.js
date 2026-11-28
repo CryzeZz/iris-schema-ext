@@ -35,14 +35,30 @@ const LANG = (process.env.IRIS_TEST_LANG || 'zh-cn').startsWith('zh') ? 'zh' : '
 i18n.setLanguage(LANG);
 const msg = (k, ...a) => i18n.t(k, ...a);
 
+// panel-real.html 里内联的是「生成那一刻」的语言。改了语言却没重渲染，
+// 页面文案和这里 msg() 取到的就会是两种语言 —— 断言会挂得莫名其妙
+// （典型表现：中文环境只挂了带文案的三条，英文环境因为两边都是默认值反而全绿）。
+{
+  const html = fs.readFileSync(path.join(EXT_ROOT, 'panel-real.html'), 'utf8');
+  const m = html.match(/__I18N__ = ({[\s\S]*?});?<\/script>/);
+  const pageLabel = m ? (JSON.parse(m[1])['common.rows'] || '') : '';
+  if (pageLabel !== msg('common.rows')) {
+    console.error(
+      `panel-real.html 的语言与 IRIS_TEST_LANG=${LANG} 不一致（页面 "common.rows" = "${pageLabel}"）。\n` +
+        `先执行：npx tsc -p . && IRIS_TEST_LANG=${LANG} node scripts/render-panel.js`
+    );
+    process.exit(2);
+  }
+}
+
 // ---------------------------------------------------------------- 假数据
 const TARGET = { profile: '138', namespace: 'APP', host: 'iris.example.com', port: 52773 };
 
 const PROFILES = {
   type: 'profiles',
   profiles: [
-    { name: '138', host: 'iris.example.com', port: 52773, protocol: 'http', user: '_SYSTEM', namespace: 'APP', description: 'HIS 测试库' },
-    { name: 'dev', host: '10.10.1.60', port: 52773, protocol: 'http', user: '_SYSTEM', namespace: 'APP', description: '开发库' },
+    { name: '138', host: 'iris.example.com', port: 52773, protocol: 'http', user: '_SYSTEM', namespace: 'APP', description: 'HIS 测试库', passwordSource: 'keychain' },
+    { name: 'dev', host: '10.10.1.60', port: 52773, protocol: 'http', user: '_SYSTEM', namespace: 'APP', description: '开发库', passwordSource: 'none' },
   ],
   default: '138',
   configPath: 'C:/Users/zhang/.iris-schema.json',
@@ -215,6 +231,10 @@ function makeScenario(name, mode, resKey, waitMs, actions) {
     "    codeLen: (t.querySelector('pre') ? t.querySelector('pre').textContent.length : 0),",
     "    elapsed: e ? e.textContent : '',",
     "    target: g ? g.textContent : '',",
+    // 状态栏当前对应的服务器与密码来源。只读 textContent 分不清
+    // 「提示文字对但属于上一台服务器」，必须把口径单独带出来。
+    "    targetProfile: g ? (g.dataset.profile || '') : '',",
+    "    targetPwd: g ? (g.dataset.pwd || '') : '',",
     "    sent: window.__sent.map(function (m) { return m.type; }),",
     '    errs: window.__ERRS,',
     "    snippet: (t.textContent || '').replace(/\\\\s+/g, ' ').slice(0, 90)",
@@ -325,6 +345,35 @@ const CASES = [
       'if (tr) tr.click();',            // 再点行
     ],
   },
+
+  // 切到没有密码的服务器：状态栏应提示「未设置密码」。
+  // 这条看着琐碎，但它验证的是「密码来源会跟着 profile 切换刷新」——
+  // 如果 updateTargetInfo 只在初次渲染时调，切服务器后提示会错位，
+  // 用户会以为 dev 上有密码、或者以为 138 上没密码。
+  {
+    name: 'noPwd',
+    mode: 'describe',
+    res: 'RES_DESCRIBE',
+    wait: 400,
+    actions: [
+      "var sel = document.getElementById('profileSel');",
+      "sel.value = 'dev';",
+      "sel.dispatchEvent(new Event('change', { bubbles: true }));",
+    ],
+  },
+
+  // 「设置密码…」菜单项：点下去必须发出 setPassword 消息（而不是当成查询模式）。
+  {
+    name: 'setPwd',
+    mode: 'describe',
+    res: 'RES_DESCRIBE',
+    wait: 300,
+    actions: [
+      "document.getElementById('moreBtn').click();",
+      "var b = document.getElementById('setPwdBtn');",
+      'if (b) b.click();',
+    ],
+  },
 ];
 
 (async () => {
@@ -362,6 +411,19 @@ const CASES = [
     ['describe 渲染表格 5 行', () => reports.describe.tableRows === 5],
     ['describe 显示耗时', () => /\d+/.test(reports.describe.elapsed)],
     ['describe 显示目标 138 / APP', () => /138/.test(reports.describe.target) && /APP/.test(reports.describe.target)],
+    // 密码来源只在「不是 keychain」时提示：有 keychain 密码是正常状态，不该在状态栏刷存在感。
+    // 138 的 passwordSource 是 keychain → 不显示；切到 dev（none）→ 显示「未设置密码」。
+    ['状态栏不提示 keychain 密码', () => reports.describe.targetPwd === 'keychain'
+      && !reports.describe.target.includes(msg('pwd.notSet'))
+      && !reports.describe.target.includes(msg('pwd.inConfig'))],
+    // 断言必须同时看「切到了哪台」和「提示了什么」。
+    // 早先这里只查文字，而 msg('pwd.notSet') 的中英文串恰好也出现在引导文案里，
+    // 于是切换没生效时断言照样通过 —— 一条永远为真的断言比没有更糟。
+    ['缺密码的服务器会提示未设置', () => reports.noPwd.targetProfile === 'dev'
+      && reports.noPwd.targetPwd === 'none'
+      && reports.noPwd.target.includes(msg('pwd.notSet'))],
+    // 菜单里的「设置密码…」必须真的发消息，否则点了没反应
+    ['菜单提供设置密码入口', () => (reports.setPwd.sent || []).includes('setPassword')],
     ['udl 渲染代码（>200 字符）', () => reports.udl.codeLen > 200],
     ['er 渲染 SVG', () => reports.er.hasSvg],
     ['er SVG 图形元素 >10', () => reports.er.svgNodes > 10],
