@@ -28,3 +28,12 @@ package-lock.json
 
 # 开发文档：面向贡献者，装在用户的 VS Code 里没有意义
 DEVELOPMENT.md
+
+# 图标源图与多余尺寸：扩展只用 media/iris-schema@256.png（package.json 的 icon 与面板标题栏），
+# activity.svg 是活动栏图标。其余尺寸只在设计时看效果，打进包只是白占体积。
+media/icon-marketplace.png
+media/iris-schema.png
+media/iris-schema@512.png
+media/iris-schema@128.png
+media/iris-schema@64.png
+media/iris-schema@32.png

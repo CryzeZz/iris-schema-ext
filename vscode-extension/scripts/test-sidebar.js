@@ -68,7 +68,9 @@ ok(/A[\d.]+ [\d.]+ 0 0 1/.test(svg), '字腔用圆弧（否则会画成正圆顶
 ok(!/<circle/.test(svg), '没有放大镜的 circle（旧图标残留）');
 ok(!/--vscode-activityBar-background/.test(svg), '没有依赖活动栏背景色挖空（换主题会露馅）');
 
-// 市场列表图标：必须是 PNG、512x512，vsce 对尺寸有要求
+// 市场列表图标：PNG 格式（vsce 明确拒绝 SVG），尺寸不小于 128x128 且为正方形。
+// vsce 自身只校验「文件存在」和「不是 SVG」，尺寸是 Marketplace 页面的要求：
+// 最小 128x128，官方建议 256x256。原来这条断言写死 512x512，是错的。
 const mpIcon = path.join(root, pkg.icon || '');
 ok(!!pkg.icon && fs.existsSync(mpIcon), 'package.json 声明了市场图标且文件存在', pkg.icon);
 if (fs.existsSync(mpIcon)) {
@@ -77,7 +79,8 @@ if (fs.existsSync(mpIcon)) {
   ok(isPng, '市场图标是合法 PNG');
   const w = buf.readUInt32BE(16);
   const h = buf.readUInt32BE(20);
-  ok(w === 512 && h === 512, '市场图标是 512x512（vsce 要求）', `${w}x${h}`);
+  ok(w === h, '市场图标是正方形', `${w}x${h}`);
+  ok(w >= 128, '市场图标不小于 128x128（Marketplace 下限）', `${w}x${h}`);
 }
 
 // ---------------- 3. 侧边栏视图 HTML ----------------

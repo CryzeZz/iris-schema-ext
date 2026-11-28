@@ -124,8 +124,10 @@ mermaid 的 `erDiagram` 词法里 `ATTRIBUTE_WORD` 不认 `.`，而 IRIS 的引�
 
 | 文件 | 用途 | 说明 |
 |---|---|---|
-| `media/icon-marketplace.png` | 扩展列表缩略图（`package.json` 的 `icon`）、面板标题栏 | 原图，512×512 |
+| `media/iris-schema@256.png` | 扩展列表缩略图（`package.json` 的 `icon`）、面板标题栏 | 256×256，Marketplace 建议尺寸 |
 | `media/activity.svg` | 活动栏图标 | 从原图量出来重画的单色版 |
+
+`media/` 下还有一组同源尺寸图（`iris-schema.png` 512、`@256` / `@128` / `@64` / `@32`）和原始的 `icon-marketplace.png`（512×512，仓库根 `icon.png` 的副本）。后两张现在不参与打包，留着是给 `scripts/build-activity-icon.js` 当测量源图的。
 
 活动栏那个不能直接贴 PNG。VS Code 会用主题前景色覆盖图标颜色并把它当蒙版，贴一张带深蓝底的位图，结果是一块看不出内容的脏方块。所以只保留 `IR` 字标，抠掉底色和三圈弧（24px 下三圈弧全糊成噪点），由脚本从原图测量后生成：
 

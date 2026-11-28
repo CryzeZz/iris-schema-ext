@@ -15,7 +15,7 @@
   "categories": [
     "Other"
   ],
-  "icon": "media/icon-marketplace.png",
+  "icon": "media/iris-schema@256.png",
   "activationEvents": [
     "onCommand:irisSchema.openPanel",
     "onCommand:irisSchema.refreshConnections",

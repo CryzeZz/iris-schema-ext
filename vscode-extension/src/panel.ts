@@ -80,8 +80,8 @@ export class IrisPanel {
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((m) => this.onMessage(m), null, this.disposables);
     // 与 package.json 的 icon 指向同一份文件：面板标题栏和扩展列表用同一张图，
-    // 打包时只多占一个条目，不重复占体积（两份 512x512 PNG 各 167KB）。
-    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'icon-marketplace.png');
+    // 打包时只多占一个条目，不重复占体积。
+    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'iris-schema@256.png');
   }
 
   /** 命令 "重新加载连接配置" 后调用。 */
